@@ -1,5 +1,14 @@
-import { describe, expect, it } from 'bun:test'
-import { isGoogleAuthUrl } from './google-auth-popup'
+import { describe, expect, it, mock } from 'bun:test'
+
+mock.module('electron', () => ({
+  BrowserWindow: class {},
+  session: { fromPartition: () => ({}) },
+}))
+mock.module('../ipc/ui', () => ({
+  uiClient: { handleDeeplink: () => {} },
+}))
+
+const { isGoogleAuthUrl } = await import('./google-auth-popup')
 
 describe('isGoogleAuthUrl', () => {
   it('matches accounts.google.com (main Google OAuth host)', () => {

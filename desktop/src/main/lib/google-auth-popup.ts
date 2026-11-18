@@ -1,6 +1,6 @@
 import { BrowserWindow, Session, session } from 'electron'
 import { mainWindow } from './main-window'
-import { uiClient } from 'main/ipc/ui'
+import { uiClient } from '../ipc/ui'
 
 /**
  * Hosts that serve Google OAuth consent / login flows.
