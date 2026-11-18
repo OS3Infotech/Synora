@@ -4,21 +4,33 @@ import youTubeGuard from 'nora/assets/scripts/youtube.bjs?raw'
 import { WATCH_PAGE_SCRIPT_CHANNEL } from '../main/ipc/constants'
 import { observeNotificationClicks, installNotificationClickHandler, setupNotificationClicks } from './notifications'
 
-// Tab webviews load this preload in every frame (see `nodeIntegrationInSubFrames`
-// in the main process), because an embedded YouTube player is an iframe on
-// youtube.com with a player response of its own. Preloads run before the page's
-// scripts, and `webFrame.executeJavaScript` reaches the page's own context --
-// which is where the guard has to patch `fetch`/`XMLHttpRequest`. The guard
-// no-ops on every other host.
-try {
-  void webFrame.executeJavaScript(youTubeGuard)
-} catch (error) {
-  console.error('[nora] failed to install YouTube ad guard', error)
+// Never inject scripts or expose Electron APIs on Google authentication domains.
+// Google BotGuard / Identity Services detects foreign globals (like window.electron)
+// or hooked prototypes and blocks sign-in with "This browser or app may not be secure".
+const hostname = typeof location !== 'undefined' ? location.hostname.toLowerCase() : ''
+const isGoogleAuthDomain =
+  hostname.includes('google.com') ||
+  hostname.includes('google.co.') ||
+  hostname.includes('gstatic.com') ||
+  hostname.includes('youtube.com')
+
+if (!isGoogleAuthDomain) {
+  // Tab webviews load this preload in every frame (see `nodeIntegrationInSubFrames`
+  // in the main process), because an embedded YouTube player is an iframe on
+  // youtube.com with a player response of its own. Preloads run before the page's
+  // scripts, and `webFrame.executeJavaScript` reaches the page's own context --
+  // which is where the guard has to patch `fetch`/`XMLHttpRequest`. The guard
+  // no-ops on every other host.
+  try {
+    void webFrame.executeJavaScript(youTubeGuard)
+  } catch (error) {
+    console.error('[nora] failed to install YouTube ad guard', error)
+  }
 }
 
 // This preload also runs in Nora's own window. Only guest frames have a host.
 // Focus events can come from page scripts; require actual user input instead.
-if (process.argv.includes('--nora-tab-guest')) {
+if (process.argv.includes('--nora-tab-guest') && !isGoogleAuthDomain) {
   if (process.isMainFrame && process.contextIsolated) {
     // Electron 43 does not implement persistent (service-worker) notifications.
     setupNotificationClicks(
@@ -48,7 +60,7 @@ if (process.argv.includes('--nora-tab-guest')) {
 
 // The renderer bridge stays a main-frame API. Every top-level page already had
 // it; handing it to third-party iframes as well would be a new grant.
-if (process.isMainFrame) {
+if (process.isMainFrame && !isGoogleAuthDomain) {
   // Guests only need content messages. In particular, never expose arbitrary IPC
   // sends that could bypass the isolated notification click check.
   const api = process.argv.includes('--nora-tab-guest') ? {
