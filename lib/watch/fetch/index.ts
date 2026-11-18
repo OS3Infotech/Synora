@@ -11,6 +11,7 @@ import { fetchMastodon } from './mastodon'
 import { fetchReddit } from './reddit'
 import { fetchFacebook } from './facebook'
 import { fetchTikTok } from './tiktok'
+import { fetchMedium, fetchSubstack, fetchWordpress, fetchRss } from './blog'
 
 export * from './common'
 export { fetchImginn, imginnBlocked$, resumeImginn } from './instagram'
@@ -32,4 +33,8 @@ export const fetchers: Record<WatchSite, WatchFetcher> = {
   reddit: fetchReddit,
   facebook: fetchFacebook,
   tiktok: fetchTikTok,
+  medium: fetchMedium,
+  substack: fetchSubstack,
+  wordpress: fetchWordpress,
+  rss: fetchRss,
 }

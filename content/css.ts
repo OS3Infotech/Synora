@@ -15,6 +15,9 @@ export const hostHomes: Record<string, string> = {
   'www.tumblr.com': 'tumblr',
   'm.vk.com': 'vk',
   'x.com': 'x',
+  'medium.com': 'medium',
+  'substack.com': 'substack',
+  'wordpress.com': 'wordpress',
 }
 
 const injectedStyleId = '_nora_injected_css'

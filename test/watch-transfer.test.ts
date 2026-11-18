@@ -16,14 +16,14 @@ describe('source list export', () => {
 
   test('skips folders of unsupported feeds while preserving truly empty folders', () => {
     const imported = parseSourceList(`<opml><body>
-      <outline text="Blogs"><outline text="News"><outline xmlUrl="https://example.com/feed.xml" /></outline></outline>
+      <outline text="Blogs"><outline text="News"><outline xmlUrl="https://example.com/not-a-feed" /></outline></outline>
       <outline text="Space"><outline htmlUrl="https://www.reddit.com/r/space/" /></outline>
       <outline text="Empty" />
     </body></opml>`)
     expect(imported.timelines.map((timeline) => timeline.name).sort()).toEqual(['Empty', 'Space'])
     expect(imported.profiles).toEqual([{ site: 'reddit', handle: 'r/space', timeline: 'Space' }])
     expect(imported.unrecognized).toBe(1)
-    const unsupported = parseSourceList('<opml><body><outline text="Blogs"><outline xmlUrl="https://example.com/feed.xml" /></outline></body></opml>')
+    const unsupported = parseSourceList('<opml><body><outline text="Blogs"><outline xmlUrl="https://example.com/not-a-feed" /></outline></body></opml>')
     expect(unsupported.timelines).toEqual([])
     expect(unsupported.profiles).toEqual([])
   })

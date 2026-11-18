@@ -1,3 +1,6 @@
+// Remove ELECTRON_RUN_AS_NODE if set by IDE / terminal environment
+delete process.env.ELECTRON_RUN_AS_NODE
+
 import { resolve } from 'path'
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 import react from '@vitejs/plugin-react'

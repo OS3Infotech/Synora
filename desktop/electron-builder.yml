@@ -1,5 +1,5 @@
-appId: jp.nonbili.nora
-productName: Nora
+appId: jp.nonbili.aipulse
+productName: AIPulse
 directories:
   buildResources: build
 files:
@@ -14,7 +14,7 @@ files:
 asarUnpack:
   - resources/**
 protocols:
-  - name: Nora
+  - name: AIPulse
     schemes:
       - nora
 win:

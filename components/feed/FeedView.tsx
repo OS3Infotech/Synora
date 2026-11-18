@@ -1,5 +1,5 @@
 import { ActivityIndicator, Animated, BackHandler, FlatList, Pressable, ScrollView, View, useColorScheme, type LayoutRectangle, type ScrollViewInstance } from 'react-native'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useValue } from '@legendapp/state/react'
 import MaterialIcons from '@react-native-vector-icons/material-icons'
 import { Image } from 'expo-image'
@@ -164,7 +164,7 @@ const profileAccount = (profile: WatchedProfile): string | null => {
 // The service icons are drawn at 24px.
 const SERVICE_ICON_SIZE = 24
 // Sites whose icon fills a square, to be cut round in an avatar's badge.
-const SQUARE_ICON_SITES = new Set<WatchSite>(['x', 'threads', 'tiktok', 'instagram'])
+const SQUARE_ICON_SITES = new Set<WatchSite>(['x', 'threads', 'tiktok', 'instagram', 'medium', 'substack', 'wordpress', 'rss'])
 
 /** A button of an empty state: the one to do first is filled. */
 const EmptyAction: React.FC<{
@@ -480,6 +480,7 @@ export const FeedView: React.FC<{
   const timelines = useValue(watch$.timelines)
   const timeline = useValue(() => getTimeline(timelineId))
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
+  const [selectedSite, setSelectedSite] = useState<WatchSite | null>(null)
   // When the selected source's header was opened to show how it is being checked; null while it is closed.
   const [detailsAt, setDetailsAt] = useState<number | null>(null)
   const detailsOpen = detailsAt !== null
@@ -546,10 +547,12 @@ export const FeedView: React.FC<{
   // A source picked from the list of them all, for this tab.
   useEffect(() => {
     if (picked?.tabId !== tabId) return
+    const profile = allProfiles.find((p) => p.key === picked.profileKey)
+    if (profile) setSelectedSite(profile.site)
     setSelectedKey(picked.profileKey)
     listRef.current?.scrollToOffset({ offset: 0, animated: false })
     ui$.feedSelection.set(null)
-  }, [picked, tabId])
+  }, [picked, tabId, allProfiles])
 
   const chipsRef = useRef<ScrollViewInstance>(null)
   const chipLayouts = useRef(new Map<string, LayoutRectangle>())
@@ -567,12 +570,14 @@ export const FeedView: React.FC<{
 
   useEffect(() => {
     setSelectedKey(null)
+    setSelectedSite(null)
   }, [shownTimelineId])
 
   useEffect(() => {
     if (!active) return
     // The tab comes back to the whole timeline, which is what is marked read.
     setSelectedKey(null)
+    setSelectedSite(null)
     setUnreadOnShow({ keys: unreadKeys(shownTimelineId), at: Date.now() })
     setNow(Date.now())
     watch$.markFeedSeen(shownTimelineId)
@@ -592,6 +597,20 @@ export const FeedView: React.FC<{
   // Not memoized: the store changes its arrays in place, so they keep their identity across changes.
   const profiles = timeline ? allProfiles.filter((profile) => profile.timelineId === timeline.id) : allProfiles
   const profileByKey = new Map(allProfiles.map((profile) => [profile.key, profile]))
+  const availableSites = useMemo(
+    () => [...new Set(profiles.map((p) => p.site))].sort((a, b) => watchSiteLabels[a].localeCompare(watchSiteLabels[b])),
+    [profiles],
+  )
+  const siteProfiles = useMemo(
+    () => (selectedSite ? profiles.filter((p) => p.site === selectedSite) : profiles),
+    [profiles, selectedSite],
+  )
+  const onSelectSite = useCallback((site: WatchSite | null) => {
+    setSelectedSite(site)
+    setSelectedKey(null)
+    listRef.current?.scrollToOffset({ offset: 0, animated: true })
+  }, [])
+
   // A profile taken out of the timeline is no longer the one shown.
   const selected = selectedKey ? profiles.find((profile) => profile.key === selectedKey) : undefined
   const hasSelection = Boolean(selected)
@@ -601,7 +620,7 @@ export const FeedView: React.FC<{
     revealChip(selectedKey)
   }, [selectedKey])
   const shownProfileKey = selected?.key
-  const shownKeys = selected ? [selected.key] : timeline ? profiles.map((profile) => profile.key) : undefined
+  const shownKeys = selected ? [selected.key] : timeline ? siteProfiles.map((profile) => profile.key) : undefined
   useEffect(() => {
     shownKeysRef.current = shownKeys
   })
@@ -612,24 +631,31 @@ export const FeedView: React.FC<{
     return () => watch$.markFeedSeen(shownTimelineId, shownProfileKey)
   }, [active, shownTimelineId, shownProfileKey])
 
-  // Back leaves a profile for the whole feed before it leaves the tab.
+  // Back leaves a profile or site filter for the whole feed before it leaves the tab.
   useEffect(() => {
-    if (isWeb || !focused || !hasSelection) return
+    if (isWeb || !focused || (!hasSelection && !selectedSite)) return
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
-      setSelectedKey(null)
-      return true
+      if (hasSelection) {
+        setSelectedKey(null)
+        return true
+      }
+      if (selectedSite) {
+        setSelectedSite(null)
+        return true
+      }
+      return false
     })
     return () => subscription.remove()
-  }, [focused, hasSelection])
+  }, [focused, hasSelection, selectedSite])
 
   const isUnread = (post: WatchPost) =>
     unreadOnShow.keys.has(post.key) || (unreadOnShow.at > 0 && post.firstSeenAt > unreadOnShow.at)
 
   // How many posts the view has scrolled through; a view shown again starts at the first page.
-  const postProfileKeys = selected ? [selected.key] : profiles.map((profile) => profile.key)
+  const postProfileKeys = selected ? [selected.key] : siteProfiles.map((profile) => profile.key)
   const feedMediaOnly = useValue(watch$.feedMediaOnly)
   const mediaOnly = timeline ? Boolean(timeline.mediaOnly) : feedMediaOnly
-  const view = `${mediaOnly}\n${postProfileKeys.join('\n')}`
+  const view = `${mediaOnly}\n${selectedSite || 'all'}\n${postProfileKeys.join('\n')}`
   const [page, setPage] = useState({ view, limit: FEED_PAGE_SIZE })
   const limit = page.view === view ? page.limit : FEED_PAGE_SIZE
   const posts = useWatchPosts(() => getFeedPosts(postProfileKeys, limit, mediaOnly), `${limit}\n${view}`)
@@ -683,6 +709,8 @@ export const FeedView: React.FC<{
 
   // From a post: the list starts again at the top, where the source's own header is.
   const showSource = (key: string) => {
+    const profile = profileByKey.get(key)
+    if (profile) setSelectedSite(profile.site)
     setSelectedKey(key)
     setHeadHidden(false)
     listRef.current?.scrollToOffset({ offset: 0, animated: false })
@@ -843,11 +871,11 @@ export const FeedView: React.FC<{
         [t('feed.detailNotify'), notifyChoiceLabel(selectedNotify)],
       ]
     : []
-  const chips = feedChipSources(profiles, newestPostAt, unreadSourceKeys, CHIP_LIMIT, selected?.key)
+  const chips = feedChipSources(siteProfiles, newestPostAt, unreadSourceKeys, CHIP_LIMIT, selected?.key)
 
   // Handles that are on more than one site, whose chips also tell the site.
   const handleCounts = new Map<string, number>()
-  for (const profile of profiles) {
+  for (const profile of siteProfiles) {
     const handle = profile.handle.toLowerCase()
     handleCounts.set(handle, (handleCounts.get(handle) || 0) + 1)
   }
@@ -855,7 +883,63 @@ export const FeedView: React.FC<{
 
   const header = (
     <View style={isWeb ? undefined : { paddingTop: headHeight }}>
-      {profiles.length ? (
+      {availableSites.length > 1 ? (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerClassName="gap-1.5 px-4 pb-2.5"
+        >
+          <Pressable
+            hitSlop={androidHitSlop}
+            style={iosTouchTarget}
+            onPress={() => onSelectSite(null)}
+            className={clsx(
+              'h-8 flex-row items-center gap-1.5 rounded-full px-3',
+              selectedSite === null
+                ? 'bg-zinc-900 dark:bg-white'
+                : 'border border-zinc-200 bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-800/60',
+            )}
+          >
+            <NouText
+              className={clsx(
+                'text-xs font-semibold',
+                selectedSite === null ? 'text-white dark:text-zinc-900' : 'text-zinc-600 dark:text-zinc-400',
+              )}
+            >
+              {t('feed.all')}
+            </NouText>
+          </Pressable>
+          {availableSites.map((site) => {
+            const active = selectedSite === site
+            return (
+              <Pressable
+                key={site}
+                hitSlop={androidHitSlop}
+                style={iosTouchTarget}
+                onPress={() => onSelectSite(active ? null : site)}
+                className={clsx(
+                  'h-8 flex-row items-center gap-1.5 rounded-full px-3',
+                  active
+                    ? 'bg-indigo-600 dark:bg-indigo-500'
+                    : 'border border-zinc-200 bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-800/60',
+                )}
+              >
+                <View style={{ transform: [{ scale: 16 / SERVICE_ICON_SIZE }] }}>{siteIcon(site)}</View>
+                <NouText
+                  className={clsx(
+                    'text-xs font-medium',
+                    active ? 'font-semibold text-white' : 'text-zinc-700 dark:text-zinc-300',
+                  )}
+                >
+                  {watchSiteLabels[site]}
+                </NouText>
+              </Pressable>
+            )
+          })}
+        </ScrollView>
+      ) : null}
+
+      {siteProfiles.length ? (
         <ScrollView
           ref={chipsRef}
           horizontal
@@ -887,7 +971,13 @@ export const FeedView: React.FC<{
                 )}
               >
                 {profile ? <Avatar uri={profile.avatar} size={22} site={profile.site} /> : null}
-                <NouText className="text-sm">{profile ? watchSourceLabel(profile) : t('feed.all')}</NouText>
+                <NouText className="text-sm">
+                  {profile
+                    ? watchSourceLabel(profile)
+                    : selectedSite
+                      ? t('feed.allOn', { site: watchSiteLabels[selectedSite] })
+                      : t('feed.all')}
+                </NouText>
                 {profile && sharedHandles.has(profile.handle.toLowerCase()) ? (
                   <NouText className="text-xs text-zinc-500 dark:text-zinc-400">{watchSiteLabels[profile.site]}</NouText>
                 ) : null}

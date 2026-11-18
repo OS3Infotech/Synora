@@ -162,7 +162,8 @@ describe('watch transfer', () => {
     expect(sourceFromUrl('https://mastodon.social/users/Gargron.rss')).toEqual({ site: 'mastodon', handle: 'Gargron@mastodon.social' })
     expect(sourceFromUrl('x.com/jack')).toEqual({ site: 'x', handle: 'jack' })
     expect(sourceFromUrl('https://x.com/rss')).toEqual({ site: 'x', handle: 'rss' })
-    expect(sourceFromUrl('https://example.com/feed.xml')).toBeNull()
+    expect(sourceFromUrl('https://example.com/feed.xml')).toEqual({ site: 'rss', handle: 'https://example.com/feed.xml' })
+    expect(sourceFromUrl('https://example.com/not-a-feed')).toBeNull()
   })
 
   it('reads an OPML file with its folders as timelines, a source in two folders in the first', () => {
@@ -173,6 +174,7 @@ describe('watch transfer', () => {
       <outline type="rss" text="r/rust" xmlUrl="https://www.reddit.com/r/rust/.rss" htmlUrl="https://www.reddit.com/r/rust/"/>
       <outline type="rss" text="Blog" xmlUrl="https://example.com/feed.xml"/>
       <outline type="rss" text="Gargron" xmlUrl='https://mastodon.social/@Gargron.rss'></outline>
+      <outline type="rss" text="Invalid" xmlUrl="https://example.com/not-a-feed"/>
     </outline>
     <outline type="rss" text="Alice" xmlUrl="https://bsky.app/profile/alice.bsky.social/rss"/>
     <outline type="rss" text="Again" xmlUrl="https://www.reddit.com/r/Rust/.rss"/>
@@ -183,6 +185,7 @@ describe('watch transfer', () => {
 </opml>`)
     expect(list.profiles).toEqual([
       { site: 'reddit', handle: 'r/rust', timeline: 'Tech & Code' },
+      { site: 'rss', handle: 'https://example.com/feed.xml', timeline: 'Tech & Code' },
       { site: 'mastodon', handle: 'Gargron@mastodon.social', timeline: 'Tech & Code' },
       { site: 'bluesky', handle: 'alice.bsky.social' },
     ])

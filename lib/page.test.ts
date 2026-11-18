@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'bun:test'
 import { isAuthCallbackUrl } from './auth-callback'
 import { isExternalAppUrl } from './url-schemes'
+import { getHomeUrl } from './page'
+import { feedTabUrl } from './feed-tab'
 
 describe('isAuthCallbackUrl', () => {
   it('matches the legacy nora:auth callback format', () => {
@@ -23,5 +25,21 @@ describe('isExternalAppUrl', () => {
 
   it('keeps normal web urls inside Nora', () => {
     expect(isExternalAppUrl('https://example.com')).toBe(false)
+  })
+})
+
+describe('getHomeUrl', () => {
+  it('returns valid URLs for blogging platforms', () => {
+    expect(getHomeUrl('medium')).toBe('https://medium.com')
+    expect(getHomeUrl('substack')).toBe('https://substack.com')
+    expect(getHomeUrl('wordpress')).toBe('https://wordpress.com')
+  })
+
+  it('routes rss to the feed tab', () => {
+    expect(getHomeUrl('rss')).toBe(feedTabUrl())
+  })
+
+  it('falls back to x for unknown platforms', () => {
+    expect(getHomeUrl('unknown-platform')).toBe('https://x.com')
   })
 })

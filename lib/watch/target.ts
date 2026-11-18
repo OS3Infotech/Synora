@@ -48,6 +48,20 @@ const isTikTokHost = (host: string) => /^(?:(?:www|m)\.)?tiktok\.com$/.test(host
 
 const TIKTOK_PROFILE_PATH = /^\/@([A-Za-z0-9_.]{2,24})\/?$/
 
+const mediumReservedPaths = new Set([
+  'about', 'tag', 'topics', 'topic', 'search', 'me', 'm', 'policy', 'creators', 'membership', 'plans', 'explore',
+  'feed', 'followers', 'following', 'lists', 'stories', 'notifications', 'settings',
+])
+
+const isMediumHost = (host: string) => /^(?:www\.)?medium\.com$/.test(host) || host.endsWith('.medium.com')
+
+const isSubstackHost = (host: string) => /^(?:www\.)?substack\.com$/.test(host) || host.endsWith('.substack.com')
+
+const isWordpressHost = (host: string) => host.endsWith('.wordpress.com')
+
+const RSS_PATH = /(?:\/|^)(?:feeds?|rss|atom)(?:\/|$|\.xml)|\.(?:rss|atom|xml)$/i
+const FEED_SUFFIX = /(?:\/\.?|\.)(?:rss|atom)$/i
+
 // A profile on a Mastodon server, local or as seen from another server: /@user or /@user@host.
 const MASTODON_PROFILE_PATH = /^\/@([A-Za-z0-9_]{1,30})(?:@([a-z0-9-]+(?:\.[a-z0-9-]+)+))?\/?$/
 
@@ -59,13 +73,17 @@ export function getWatchTarget(url: string | null | undefined): WatchTarget | nu
   if (!url) {
     return null
   }
+  if (url.startsWith('rss:')) {
+    const raw = url.replace(/^rss:/i, '').trim()
+    return raw ? { site: 'rss', handle: raw } : null
+  }
   let parsed: URL
   try {
     parsed = new URL(url)
   } catch {
     return null
   }
-  const { hostname, pathname } = parsed
+  const { hostname, pathname, searchParams } = parsed
   if (isXHost(hostname)) {
     const match = pathname.match(X_PROFILE_PATH)
     return match && !xReservedPaths.has(match[1].toLowerCase()) ? { site: 'x', handle: match[1] } : null
@@ -79,7 +97,8 @@ export function getWatchTarget(url: string | null | undefined): WatchTarget | nu
     return match ? { site: 'threads', handle: match[1] } : null
   }
   if (hostname === 'bsky.app') {
-    const match = pathname.match(BLUESKY_PROFILE_PATH)
+    const cleanPath = pathname.replace(FEED_SUFFIX, '')
+    const match = cleanPath.match(BLUESKY_PROFILE_PATH)
     if (!match) return null
     try {
       return { site: 'bluesky', handle: decodeURIComponent(match[1]) }
@@ -88,14 +107,15 @@ export function getWatchTarget(url: string | null | undefined): WatchTarget | nu
     }
   }
   if (isRedditHost(hostname)) {
-    const subreddit = pathname.match(SUBREDDIT_PATH)
+    const cleanPath = pathname.replace(FEED_SUFFIX, '')
+    const subreddit = cleanPath.match(SUBREDDIT_PATH)
     if (subreddit) return { site: 'reddit', handle: `r/${subreddit[1]}` }
-    const user = pathname.match(REDDIT_USER_PATH)
+    const user = cleanPath.match(REDDIT_USER_PATH)
     return user ? { site: 'reddit', handle: `u/${user[1]}` } : null
   }
   if (isFacebookHost(hostname)) {
     if (pathname === '/profile.php' || pathname === '/profile.php/') {
-      const id = parsed.searchParams.get('id')
+      const id = searchParams.get('id')
       return id && /^\d+$/.test(id) ? { site: 'facebook', handle: id } : null
     }
     const group = pathname.match(FACEBOOK_GROUP_PATH)
@@ -109,9 +129,71 @@ export function getWatchTarget(url: string | null | undefined): WatchTarget | nu
     const match = pathname.match(TIKTOK_PROFILE_PATH)
     return match ? { site: 'tiktok', handle: match[1] } : null
   }
+  if (isMediumHost(hostname)) {
+    if (hostname === 'medium.com' || hostname === 'www.medium.com') {
+      const tagMatch = pathname.match(/^\/(?:feed\/)?tag\/([A-Za-z0-9_.-]+)(?:\/.*)?$/i)
+      if (tagMatch) return { site: 'medium', handle: `tag/${tagMatch[1].toLowerCase()}` }
+      const topicMatch = pathname.match(/^\/(?:feed\/)?topic\/([A-Za-z0-9_.-]+)(?:\/.*)?$/i)
+      if (topicMatch) return { site: 'medium', handle: `tag/${topicMatch[1].toLowerCase()}` }
+      const pubTagMatch = pathname.match(/^\/(?:feed\/)?([A-Za-z0-9_.-]+)\/tagged\/([A-Za-z0-9_.-]+)(?:\/.*)?$/i)
+      if (pubTagMatch && !mediumReservedPaths.has(pubTagMatch[1].toLowerCase())) {
+        return { site: 'medium', handle: `${pubTagMatch[1]}/tagged/${pubTagMatch[2].toLowerCase()}` }
+      }
+      const userMatch = pathname.match(/^\/@([A-Za-z0-9_.-]+)(?:\/.*)?$/)
+      if (userMatch) return { site: 'medium', handle: `@${userMatch[1]}` }
+      const feedUserMatch = pathname.match(/^\/feed\/@([A-Za-z0-9_.-]+)\/?$/)
+      if (feedUserMatch) return { site: 'medium', handle: `@${feedUserMatch[1]}` }
+      const feedPubMatch = pathname.match(/^\/feed\/([A-Za-z0-9_.-]+)\/?$/)
+      if (feedPubMatch) return { site: 'medium', handle: feedPubMatch[1] }
+      const pubMatch = pathname.match(/^\/([A-Za-z0-9_.-]{2,50})\/?$/)
+      if (pubMatch && !mediumReservedPaths.has(pubMatch[1].toLowerCase())) {
+        return { site: 'medium', handle: pubMatch[1] }
+      }
+    } else if (hostname.endsWith('.medium.com')) {
+      const sub = hostname.replace(/\.medium\.com$/, '')
+      if (sub && sub !== 'www' && sub !== 'policy') {
+        const subTagMatch = pathname.match(/^\/(?:feed\/)?(?:tagged|tag)\/([A-Za-z0-9_.-]+)(?:\/.*)?$/i)
+        if (subTagMatch) {
+          return { site: 'medium', handle: `${sub}/tagged/${subTagMatch[1].toLowerCase()}` }
+        }
+        return { site: 'medium', handle: `@${sub}` }
+      }
+    }
+  }
+  if (isSubstackHost(hostname)) {
+    if (hostname === 'substack.com' || hostname === 'www.substack.com') {
+      const userMatch = pathname.match(/^\/@([A-Za-z0-9_.-]+)(?:\/.*)?$/)
+      if (userMatch) return { site: 'substack', handle: `@${userMatch[1]}` }
+      const feedMatch = pathname.match(/^\/feed\/@([A-Za-z0-9_.-]+)\/?$/)
+      if (feedMatch) return { site: 'substack', handle: `@${feedMatch[1]}` }
+    } else if (hostname.endsWith('.substack.com')) {
+      const sub = hostname.replace(/\.substack\.com$/, '')
+      if (sub && !['www', 'support', 'api', 'cdn', 'email'].includes(sub.toLowerCase())) {
+        const sectionMatch = pathname.match(/^\/(?:s|t)\/([A-Za-z0-9_.-]+)(?:\/.*)?$/i)
+        if (sectionMatch) {
+          return { site: 'substack', handle: `${sub}/s/${sectionMatch[1].toLowerCase()}` }
+        }
+        return { site: 'substack', handle: sub }
+      }
+    }
+  }
+  if (isWordpressHost(hostname)) {
+    const sub = hostname.replace(/\.wordpress\.com$/, '')
+    if (sub && !['www', 'en.support', 'support', 'api', 'wordpress'].includes(sub.toLowerCase())) {
+      const tagMatch = pathname.match(/^\/(?:tag|category)\/([A-Za-z0-9_.-]+)(?:\/.*)?$/i)
+      if (tagMatch) {
+        return { site: 'wordpress', handle: `${sub}/${tagMatch[0].replace(/^\/|\/$/g, '')}` }
+      }
+      return { site: 'wordpress', handle: sub }
+    }
+  }
   if (!notMastodonHost.test(hostname)) {
-    const match = pathname.match(MASTODON_PROFILE_PATH)
-    return match ? { site: 'mastodon', handle: `${match[1]}@${match[2] || hostname}` } : null
+    const cleanPath = pathname.replace(FEED_SUFFIX, '').replace(/^\/users\/([^/]+)$/, '/@$1')
+    const match = cleanPath.match(MASTODON_PROFILE_PATH)
+    if (match) return { site: 'mastodon', handle: `${match[1]}@${match[2] || hostname}` }
+  }
+  if (RSS_PATH.test(pathname) || searchParams.has('feed') || searchParams.has('rss')) {
+    return { site: 'rss', handle: url }
   }
   return null
 }
@@ -146,6 +228,24 @@ export const watchProfileUrl = ({ site, handle, url }: WatchTarget & { url?: str
       return /^\d+$/.test(handle) ? `https://www.facebook.com/profile.php?id=${handle}` : `https://www.facebook.com/${handle}/`
     case 'tiktok':
       return `https://www.tiktok.com/@${handle}`
+    case 'medium':
+      return `https://medium.com/${handle}`
+    case 'substack':
+      if (handle.startsWith('@')) return `https://substack.com/${handle}`
+      if (handle.includes('/s/')) {
+        const [sub, ...rest] = handle.split('/')
+        return `https://${sub}.substack.com/${rest.join('/')}/`
+      }
+      return `https://${handle}.substack.com/`
+    case 'wordpress':
+      if (handle.includes('/')) {
+        const [sub, ...rest] = handle.split('/')
+        const domain = sub.includes('.') ? sub : `${sub}.wordpress.com`
+        return `https://${domain}/${rest.join('/')}/`
+      }
+      return handle.includes('.') ? `https://${handle}/` : `https://${handle}.wordpress.com/`
+    case 'rss':
+      return /^https?:\/\//i.test(handle) ? handle : `https://${handle}`
   }
 }
 
@@ -153,5 +253,38 @@ export const watchProfileUrl = ({ site, handle, url }: WatchTarget & { url?: str
  * How a source is named to the user: @handle, but a subreddit or user of Reddit as Reddit has it,
  * r/name or u/name, and a group on Facebook as its address has it, groups/name.
  */
-export const watchSourceLabel = ({ site, handle }: WatchTarget) =>
-  site === 'reddit' || (site === 'facebook' && handle.startsWith('groups/')) ? handle : `@${handle}`
+export const watchSourceLabel = ({ site, handle }: WatchTarget) => {
+  if (site === 'reddit' || (site === 'facebook' && handle.startsWith('groups/'))) return handle
+  if (site === 'wordpress') {
+    if (handle.includes('/')) {
+      const [sub, ...rest] = handle.split('/')
+      return `${sub} (${rest.join('/')})`
+    }
+    return handle.includes('.') ? handle : `${handle}.wordpress.com`
+  }
+  if (site === 'rss') {
+    try {
+      const u = new URL(/^https?:\/\//i.test(handle) ? handle : `https://${handle}`)
+      return u.hostname + (u.pathname !== '/' && u.pathname !== '/feed' ? u.pathname : '')
+    } catch {
+      return handle
+    }
+  }
+  if (site === 'substack') {
+    if (handle.includes('/s/')) {
+      const [sub, ...rest] = handle.split('/')
+      return `${sub} (${rest.join('/')})`
+    }
+    if (!handle.startsWith('@')) return `${handle}.substack.com`
+    return handle
+  }
+  if (site === 'medium') {
+    if (handle.startsWith('tag/')) return `#${handle.slice(4)}`
+    if (handle.includes('/tagged/')) {
+      const [pub, tag] = handle.split('/tagged/')
+      return `${pub} #${tag}`
+    }
+    return handle
+  }
+  return handle.startsWith('@') ? handle : `@${handle}`
+}

@@ -74,6 +74,9 @@ const serviceHosts: Record<string, string> = {
   tumblr: 'tumblr.com',
   vk: 'vk.com',
   x: 'x.com',
+  medium: 'medium.com',
+  substack: 'substack.com',
+  wordpress: 'wordpress.com',
 }
 
 const normalizeHost = (host: string) => host.replace(/^\*\./, '').replace(/^www\./, '').toLowerCase()

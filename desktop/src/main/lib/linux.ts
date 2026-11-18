@@ -5,7 +5,8 @@ import os from 'os'
 import path from 'path'
 
 const templateDesktopFile = (exec: string, icon: string) => `[Desktop Entry]
-Name=Nora
+Name=AIPulse
+Comment=Stay Connected to the Pulse of AI.
 Exec=${exec} %u
 Type=Application
 Categories=Network;Utility;

@@ -1,4 +1,16 @@
-export type WatchSite = 'x' | 'instagram' | 'threads' | 'bluesky' | 'mastodon' | 'reddit' | 'facebook' | 'tiktok'
+export type WatchSite =
+  | 'x'
+  | 'instagram'
+  | 'threads'
+  | 'bluesky'
+  | 'mastodon'
+  | 'reddit'
+  | 'facebook'
+  | 'tiktok'
+  | 'medium'
+  | 'substack'
+  | 'wordpress'
+  | 'rss'
 
 export const watchSiteLabels: Record<WatchSite, string> = {
   x: 'X',
@@ -9,6 +21,10 @@ export const watchSiteLabels: Record<WatchSite, string> = {
   reddit: 'Reddit',
   facebook: 'Facebook',
   tiktok: 'TikTok',
+  medium: 'Medium',
+  substack: 'Substack',
+  wordpress: 'WordPress',
+  rss: 'Blog / RSS',
 }
 
 export interface WatchTarget {

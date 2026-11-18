@@ -29,8 +29,8 @@ const intentFilters = [
 
 module.exports = ({ config }: { config: ExpoConfig }) => {
   return {
-    name: 'Nora',
-    slug: 'nora',
+    name: 'AIPulse',
+    slug: 'aipulse',
     version,
     icon: './assets/images/icon.png',
     scheme: 'nora',

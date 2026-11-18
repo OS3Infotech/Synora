@@ -241,7 +241,7 @@ export const SettingsModalTabSync = () => {
                   href="https://nora.inks.page/auth/app"
                   target="_blank"
                 >
-                  Login Nora
+                  Login AIPulse
                 </NouLink>
               </View>
             </View>
@@ -263,7 +263,7 @@ export const SettingsModalTabSync = () => {
               contentFit="cover"
             />
             <View className="flex-1">
-              <NouText>{userEmail || user?.email || 'Nora User'}</NouText>
+              <NouText>{userEmail || user?.email || 'AIPulse User'}</NouText>
               <NouText className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
                 {t('sync.currentPlan')}: {planLabel}
               </NouText>

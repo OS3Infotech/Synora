@@ -20,6 +20,7 @@ Bun.plugin({
 
 // React Native's dev-only branches read this global; the bundler normally injects it.
 ;(globalThis as { __DEV__?: boolean }).__DEV__ = false
+;(globalThis as { ErrorUtils?: any }).ErrorUtils = { getGlobalHandler: () => () => {}, setGlobalHandler: () => {} }
 // Lets React's act() flush effects and state updates instead of warning.
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -61,7 +62,21 @@ class ExpoEventEmitterStub {
 // Native modules can't be loaded by bun (react-native's entrypoint uses Flow
 // syntax), so state modules that persist via MMKV need these stubs.
 
+const MockView = () => null
+mock.module('@/modules/nora-view', () => ({
+  default: MockView,
+  NoraView: MockView,
+  setSettings: () => {},
+  addListener: () => ({ remove: () => {} }),
+  clearProfileData: () => {},
+}))
 mock.module('react-native-get-random-values', () => ({}))
+mock.module('nativewind', () => ({
+  cssInterop: () => {},
+  remapProps: () => {},
+  styled: (comp: any) => comp,
+}))
+mock.module('react-native-css-interop', () => ({}))
 
 // Components render through react-test-renderer, where a host component is just a string
 // tag, so the primitives only need names the tree can be queried by.

@@ -21,6 +21,16 @@ import { isWatchPage, registerWatchMediaScheme, setupWatch } from './lib/watch'
 
 app.userAgentFallback = getUserAgent(process.platform, true)
 
+if (
+  process.env.DISABLE_GPU === '1' ||
+  process.env.ELECTRON_DISABLE_GPU === '1' ||
+  (process.platform === 'linux' && process.env.DISPLAY?.startsWith('localhost'))
+) {
+  app.disableHardwareAcceleration()
+  app.commandLine.appendSwitch('disable-gpu')
+  app.commandLine.appendSwitch('disable-software-rasterizer')
+}
+
 function attachContextMenu(webContents: Electron.WebContents, ownerWindow: BrowserWindow): void {
   webContents.on('context-menu', (_event, params) => {
     const hasSelection = params.selectionText.trim().length > 0
@@ -139,6 +149,7 @@ function createWindow(): void {
 
   // Create the browser window.
   const mainWindow = new BrowserWindow({
+    title: 'AIPulse',
     width: Math.floor(width * 0.9),
     height: Math.floor(height * 0.9),
     show: false,

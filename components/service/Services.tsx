@@ -13,6 +13,10 @@ import {
   IconTwitter,
   IconVK,
   IconFacebookMessenger,
+  IconMedium,
+  IconSubstack,
+  IconWordPress,
+  IconRss,
 } from '../icons/Icons'
 import { Image } from 'expo-image'
 import { Text, View } from 'react-native'
@@ -39,6 +43,10 @@ export const services: Record<string, [string, () => ReactNode]> = {
   tumblr: ['Tumblr', () => <IconTumblr />],
   vk: ['VK', () => <IconVK />],
   x: ['X', () => <IconTwitter />],
+  medium: ['Medium', () => <IconMedium />],
+  substack: ['Substack', () => <IconSubstack />],
+  wordpress: ['WordPress', () => <IconWordPress />],
+  rss: ['Blog / RSS', () => <IconRss />],
 }
 
 /** The icon of a site, also of one that is not a service, as Mastodon: it is on many servers. */

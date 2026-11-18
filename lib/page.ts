@@ -23,9 +23,15 @@ export const homeUrls: Record<string, string> = {
   tumblr: 'https://www.tumblr.com',
   vk: 'https://m.vk.com',
   x: 'https://x.com',
+  medium: 'https://medium.com',
+  substack: 'https://substack.com',
+  wordpress: 'https://wordpress.com',
 }
 
 export function getHomeUrl(home: string) {
+  if (home === 'rss') {
+    return feedTabUrl()
+  }
   return homeUrls[home] || homeUrls.x
 }
 

@@ -78,6 +78,45 @@ describe('getWatchTarget', () => {
     })
   })
 
+  it('reads a profile, publication, or tag on Medium', () => {
+    expect(getWatchTarget('https://medium.com/@paulg')).toEqual({ site: 'medium', handle: '@paulg' })
+    expect(getWatchTarget('https://medium.com/@paulg/how-to-build-things-123')).toEqual({ site: 'medium', handle: '@paulg' })
+    expect(getWatchTarget('https://paulg.medium.com')).toEqual({ site: 'medium', handle: '@paulg' })
+    expect(getWatchTarget('https://medium.com/towards-data-science')).toEqual({ site: 'medium', handle: 'towards-data-science' })
+    expect(getWatchTarget('https://medium.com/tag/artificial-intelligence')).toEqual({ site: 'medium', handle: 'tag/artificial-intelligence' })
+    expect(getWatchTarget('https://medium.com/feed/tag/artificial-intelligence')).toEqual({ site: 'medium', handle: 'tag/artificial-intelligence' })
+    expect(getWatchTarget('https://medium.com/tag/programming/latest')).toEqual({ site: 'medium', handle: 'tag/programming' })
+    expect(getWatchTarget('https://medium.com/topic/technology')).toEqual({ site: 'medium', handle: 'tag/technology' })
+    expect(getWatchTarget('https://medium.com/towards-data-science/tagged/machine-learning')).toEqual({
+      site: 'medium',
+      handle: 'towards-data-science/tagged/machine-learning',
+    })
+    expect(getWatchTarget('https://towardsdatascience.medium.com/tag/ai')).toEqual({
+      site: 'medium',
+      handle: 'towardsdatascience/tagged/ai',
+    })
+    expect(getWatchTarget('https://medium.com/about')).toBeNull()
+  })
+
+  it('reads a newsletter or author on Substack', () => {
+    expect(getWatchTarget('https://astralcodexten.substack.com')).toEqual({ site: 'substack', handle: 'astralcodexten' })
+    expect(getWatchTarget('https://astralcodexten.substack.com/p/review')).toEqual({ site: 'substack', handle: 'astralcodexten' })
+    expect(getWatchTarget('https://substack.com/@zuck')).toEqual({ site: 'substack', handle: '@zuck' })
+    expect(getWatchTarget('https://support.substack.com')).toBeNull()
+  })
+
+  it('reads a blog on WordPress', () => {
+    expect(getWatchTarget('https://techcrunch.wordpress.com')).toEqual({ site: 'wordpress', handle: 'techcrunch' })
+    expect(getWatchTarget('https://en.support.wordpress.com')).toBeNull()
+  })
+
+  it('reads an RSS or Atom feed URL', () => {
+    expect(getWatchTarget('https://example.com/feed')).toEqual({ site: 'rss', handle: 'https://example.com/feed' })
+    expect(getWatchTarget('https://example.com/rss.xml')).toEqual({ site: 'rss', handle: 'https://example.com/rss.xml' })
+    expect(getWatchTarget('https://example.com/atom.xml')).toEqual({ site: 'rss', handle: 'https://example.com/atom.xml' })
+    expect(getWatchTarget('rss:https://example.com/feed.xml')).toEqual({ site: 'rss', handle: 'https://example.com/feed.xml' })
+  })
+
   it('is null for a page on Facebook that is not a page, profile or group', () => {
     expect(getWatchTarget('https://www.facebook.com/')).toBeNull()
     expect(getWatchTarget('https://www.facebook.com/marketplace/')).toBeNull()
@@ -114,6 +153,11 @@ describe('watchProfileUrl', () => {
     expect(watchProfileUrl({ site: 'facebook', handle: '100044561550831' })).toBe('https://www.facebook.com/profile.php?id=100044561550831')
     expect(watchProfileUrl({ site: 'facebook', handle: 'groups/reactjs' })).toBe('https://www.facebook.com/groups/reactjs/')
     expect(watchProfileUrl({ site: 'tiktok', handle: 'nasa' })).toBe('https://www.tiktok.com/@nasa')
+    expect(watchProfileUrl({ site: 'medium', handle: '@paulg' })).toBe('https://medium.com/@paulg')
+    expect(watchProfileUrl({ site: 'medium', handle: 'tag/artificial-intelligence' })).toBe('https://medium.com/tag/artificial-intelligence')
+    expect(watchProfileUrl({ site: 'substack', handle: 'astralcodexten' })).toBe('https://astralcodexten.substack.com/')
+    expect(watchProfileUrl({ site: 'wordpress', handle: 'techcrunch' })).toBe('https://techcrunch.wordpress.com/')
+    expect(watchProfileUrl({ site: 'rss', handle: 'https://example.com/feed' })).toBe('https://example.com/feed')
     // Or the page the site told of.
     expect(watchProfileUrl({ site: 'mastodon', handle: 'alice@example.org', url: 'https://social.example.org/@alice' })).toBe(
       'https://social.example.org/@alice',
@@ -128,5 +172,12 @@ describe('watchSourceLabel', () => {
     expect(watchSourceLabel({ site: 'reddit', handle: 'r/pics' })).toBe('r/pics')
     expect(watchSourceLabel({ site: 'facebook', handle: 'NASA' })).toBe('@NASA')
     expect(watchSourceLabel({ site: 'facebook', handle: 'groups/reactjs' })).toBe('groups/reactjs')
+    expect(watchSourceLabel({ site: 'medium', handle: '@paulg' })).toBe('@paulg')
+    expect(watchSourceLabel({ site: 'medium', handle: 'towards-data-science' })).toBe('towards-data-science')
+    expect(watchSourceLabel({ site: 'medium', handle: 'tag/artificial-intelligence' })).toBe('#artificial-intelligence')
+    expect(watchSourceLabel({ site: 'medium', handle: 'towards-data-science/tagged/machine-learning' })).toBe('towards-data-science #machine-learning')
+    expect(watchSourceLabel({ site: 'substack', handle: 'astralcodexten' })).toBe('astralcodexten.substack.com')
+    expect(watchSourceLabel({ site: 'wordpress', handle: 'techcrunch' })).toBe('techcrunch.wordpress.com')
+    expect(watchSourceLabel({ site: 'rss', handle: 'https://example.com/feed' })).toBe('example.com')
   })
 })

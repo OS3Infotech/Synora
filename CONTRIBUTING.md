@@ -1,4 +1,4 @@
-# Contributing to Nora
+# Contributing to AIPulse
 
 ## Development
 
