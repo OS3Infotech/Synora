@@ -105,7 +105,7 @@ interface Store {
   // Marks the profiles a tab shows as read: one when it shows only that one.
   markFeedSeen: (timelineId?: string, profileKey?: string) => void
   // Makes a timeline and moves the profiles into it, out of the one each was in.
-  createTimeline: (name: string, profileKeys: string[]) => string
+  createTimeline: (name: string, profileKeys: string[], emoji?: string) => string
   updateTimeline: (id: string, patch: Partial<Pick<WatchTimeline, 'name' | 'pinned' | 'mediaOnly' | 'emoji' | 'checkIntervalMinutes'>>) => void
   deleteTimeline: (id: string) => void
   // Moves a profile into a timeline, or out of any for undefined.
@@ -183,10 +183,10 @@ export const watch$: Observable<Store> = observable<Store>({
     })
   },
 
-  createTimeline: (name, profileKeys) => {
+  createTimeline: (name, profileKeys, emoji) => {
     const id = genId()
     batch(() => {
-      watch$.timelines.push({ id, name: name.trim() })
+      watch$.timelines.push({ id, name: name.trim(), ...(emoji ? { emoji } : {}) })
       for (const key of profileKeys) watch$.setProfileTimeline(key, id)
     })
     return id

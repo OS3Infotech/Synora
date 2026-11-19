@@ -19,6 +19,7 @@ import {
   formatPostAge,
   mediaKey,
   refreshesMedia,
+  seedDefaultCommunities,
   splitInterval,
   watchKey,
   watchProfileUrl,
@@ -768,6 +769,15 @@ export const FeedView: React.FC<{
     }),
     { label: '', handler: () => {}, kind: 'separator' as const },
     {
+      label: t('feed.loadDefaultCommunities'),
+      icon: <NouText style={{ fontSize: 15, lineHeight: 20 }}>⚡</NouText>,
+      systemImage: 'sparkles',
+      handler: () => {
+        const created = seedDefaultCommunities(watch$)
+        if (created.length > 0) void refresh('manual')
+      },
+    },
+    {
       label: t('feed.addSources'),
       icon: <MaterialIcons name="add-link" size={18} color={iconColor} />,
       systemImage: 'link.badge.plus',
@@ -883,6 +893,75 @@ export const FeedView: React.FC<{
 
   const header = (
     <View style={isWeb ? undefined : { paddingTop: headHeight }}>
+      {(timelines.length > 0 || allProfiles.length > 0) ? (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerClassName="gap-1.5 px-4 pb-2"
+        >
+          <Pressable
+            hitSlop={androidHitSlop}
+            style={iosTouchTarget}
+            onPress={() => showTimeline(undefined)}
+            className={clsx(
+              'h-8 flex-row items-center gap-1.5 rounded-full px-3',
+              !timeline
+                ? 'bg-zinc-900 dark:bg-white'
+                : 'border border-zinc-200 bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-800/60',
+            )}
+          >
+            <NouText className="text-xs">🌐</NouText>
+            <NouText
+              className={clsx(
+                'text-xs font-semibold',
+                !timeline ? 'text-white dark:text-zinc-900' : 'text-zinc-600 dark:text-zinc-400',
+              )}
+            >
+              {t('feed.allSources')}
+            </NouText>
+          </Pressable>
+          {timelines.map((current) => {
+            const active = timeline?.id === current.id
+            const emoji = current.emoji || '💬'
+            return (
+              <Pressable
+                key={current.id}
+                hitSlop={androidHitSlop}
+                style={iosTouchTarget}
+                onPress={() => showTimeline(current.id)}
+                className={clsx(
+                  'h-8 flex-row items-center gap-1.5 rounded-full px-3',
+                  active
+                    ? 'bg-zinc-900 dark:bg-white'
+                    : 'border border-zinc-200 bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-800/60',
+                )}
+              >
+                <NouText className="text-xs">{emoji}</NouText>
+                <NouText
+                  className={clsx(
+                    'text-xs font-medium',
+                    active ? 'font-semibold text-white dark:text-zinc-900' : 'text-zinc-700 dark:text-zinc-300',
+                  )}
+                >
+                  {current.name}
+                </NouText>
+              </Pressable>
+            )
+          })}
+          <Pressable
+            hitSlop={androidHitSlop}
+            style={iosTouchTarget}
+            onPress={() => openFeedOverlay('timelineModal', { tabId })}
+            className="h-8 flex-row items-center gap-1 rounded-full border border-dashed border-zinc-300 dark:border-zinc-700 px-2.5 bg-zinc-50 dark:bg-zinc-900/60"
+          >
+            <MaterialIcons name="add" size={15} color={iconColor} />
+            <NouText className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
+              {t('feed.newTimeline')}
+            </NouText>
+          </Pressable>
+        </ScrollView>
+      ) : null}
+
       {availableSites.length > 1 ? (
         <ScrollView
           horizontal
@@ -1138,20 +1217,43 @@ export const FeedView: React.FC<{
   const noSources = !profiles.length && !(timeline && allProfiles.length)
   const empty = noSources ? (
     <View className="items-center px-8 py-12">
-      <MaterialIcons name="rss-feed" size={40} color={iconColor} />
-      <NouText className="mt-4 text-center text-lg font-semibold">{t('feed.emptyTitle')}</NouText>
-      <NouText className="mt-1 text-center text-zinc-600 dark:text-zinc-400">{t('feed.emptyDescription')}</NouText>
-      <WatchSites className="mt-6" />
+      <NouText style={{ fontSize: 40, lineHeight: 48 }}>⚡</NouText>
+      <NouText className="mt-3 text-center text-xl font-bold">Synora</NouText>
+      <NouText className="mt-1 max-w-sm text-center text-sm text-zinc-600 dark:text-zinc-400">
+        {t('feed.loadDefaultCommunitiesHint')}
+      </NouText>
+      <Pressable
+        onPress={() => {
+          const created = seedDefaultCommunities(watch$)
+          if (created.length > 0) void refresh('manual')
+        }}
+        accessibilityRole="button"
+        style={iosTouchTarget}
+        className="mt-6 h-11 flex-row items-center gap-2 rounded-full bg-indigo-600 px-6 shadow-sm"
+      >
+        <NouText className="text-base">⚡</NouText>
+        <NouText className="font-semibold text-white">{t('feed.loadDefaultCommunities')}</NouText>
+      </Pressable>
+      <Pressable
+        onPress={() => openFeedOverlay('timelineModal', { tabId })}
+        accessibilityRole="button"
+        style={iosTouchTarget}
+        className="mt-3 h-10 flex-row items-center gap-2 rounded-full border border-dashed border-zinc-400 dark:border-zinc-600 px-5"
+      >
+        <MaterialIcons name="add" size={18} color={iconColor} />
+        <NouText className="text-sm font-medium text-zinc-700 dark:text-zinc-300">{t('feed.newTimeline')}</NouText>
+      </Pressable>
       <Pressable
         onPress={() => openFeedOverlay('addSourcesModal', { tabId, timelineId: timeline?.id })}
         accessibilityRole="button"
         style={iosTouchTarget}
-        className="mt-8 h-11 flex-row items-center gap-2 rounded-full bg-indigo-600 px-6"
+        className="mt-2.5 h-10 flex-row items-center gap-2 rounded-full border border-zinc-300 dark:border-zinc-700 px-5"
       >
-        <MaterialIcons name="add" size={20} color="#ffffff" />
-        <NouText className="font-medium text-white">{t('feed.addSources')}</NouText>
+        <MaterialIcons name="add-link" size={18} color={iconColor} />
+        <NouText className="text-sm font-medium text-zinc-700 dark:text-zinc-300">{t('feed.addSources')}</NouText>
       </Pressable>
-      <NouText className="mt-4 text-center text-sm text-zinc-500 dark:text-zinc-400">{t('feed.emptyWatchHint')}</NouText>
+      <WatchSites className="mt-6" />
+      <NouText className="mt-4 text-center text-xs text-zinc-500 dark:text-zinc-400">{t('feed.emptyWatchHint')}</NouText>
     </View>
   ) : (
     <View className="items-center px-8 py-16">
