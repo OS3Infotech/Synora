@@ -13,11 +13,12 @@ defaults:
 jobs:
   build:
     strategy:
+      fail-fast: false
       matrix:
         os:
-          - macos-15
-          - ubuntu-latest
           - windows-latest
+          - ubuntu-latest
+          - macos-15
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
 
@@ -56,14 +57,10 @@ jobs:
             echo -n "${{ secrets.APPLICATION_CERT }}" | base64 -d > application.cer
             sudo security add-trusted-cert -d -r trustRoot -k ~/Library/Keychains/login.keychain installer.cer
             sudo security add-trusted-cert -d -r trustRoot -k ~/Library/Keychains/login.keychain application.cer
+            bun electron-builder --x64 --arm64 --publish never
+          else
+            bun electron-builder --x64 --arm64 --publish never -c.mac.identity=null
           fi
-          bun electron-builder --x64 --arm64 --publish never
-        env:
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          CSC_LINK: ${{ secrets.CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
 
       - name: Install Snapcraft
         if: startsWith(matrix.os, 'ubuntu')
@@ -92,6 +89,7 @@ jobs:
 
   release:
     needs: build
+    if: always()
     runs-on: ubuntu-latest
     permissions:
       contents: write
