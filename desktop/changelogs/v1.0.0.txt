@@ -1,0 +1,5 @@
+- Official Synora 1.0.0 Release: Everything connected in one intelligent space
+- Integrated Staying Ahead AI (daily-ai-updates) platform with custom icon and multi-tab routing
+- Fixed Google OAuth authentication on Desktop (LinkedIn and social sign-in)
+- Enhanced internal multi-tab link dispatching and workspace views
+- Direct installers for Windows (.exe), macOS (.dmg), and Linux (.AppImage)
