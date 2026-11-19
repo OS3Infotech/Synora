@@ -33,6 +33,7 @@ describe('getHomeUrl', () => {
     expect(getHomeUrl('medium')).toBe('https://medium.com')
     expect(getHomeUrl('substack')).toBe('https://substack.com')
     expect(getHomeUrl('wordpress')).toBe('https://wordpress.com')
+    expect(getHomeUrl('stayingahead')).toBe('https://stayingahead.ai/daily-ai-updates')
   })
 
   it('routes rss to the feed tab', () => {

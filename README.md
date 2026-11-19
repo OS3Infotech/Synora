@@ -1,102 +1,165 @@
-# <img src="desktop/icon.png" align="top" height="44"> AIPulse
+# <img src="desktop/icon.png" align="top" height="44"> Synora
 
-> **Stay Connected to the Pulse of AI.**
+> **Everything connected in one intelligent space. Premium, modern, brandable.**
 
-A modern intelligence and feed platform designed to keep you updated on the latest AI breakthroughs, discussions, research, and insights across social networks and publishing platforms. Available on Desktop (Linux, macOS, Windows), Android, and iOS.
+A modern intelligence workspace and multi-platform feed browser designed to keep you seamlessly connected to the latest AI breakthroughs, daily updates, discussions, research, and publications. Available on Desktop (**Linux, macOS, Windows**), Web, Android, and iOS.
 
-[<img src="https://img.shields.io/badge/App_Store-0D96F6?style=for-the-badge&logo=app-store&logoColor=white"
-      alt="Get it on App Store"
-      height="50">](https://apps.apple.com/us/app/nora-sns-browser/id6758549275)
-[<img src="https://img.shields.io/badge/Google_Play-01875f?style=for-the-badge&logo=google-play"
-      alt="Get it on Google Play"
-      hspace="16"
-      height="50">](https://play.google.com/store/apps/details?id=jp.nonbili.nora)
-[<img src="https://img.shields.io/badge/F--Droid-1976D2?style=for-the-badge&logo=f-droid"
-      alt="Get it on F-Droid"
-      height="50">](https://f-droid.org/packages/jp.nonbili.nora/)
-[<img src="https://img.shields.io/badge/GitHub%20Releases-100000?style=for-the-badge&logo=github"
-      alt="Get it on GitHub"
-      hspace="16"
-      height="50">](https://github.com/nonbili/Nora/releases/latest)
+---
 
-AIPulse Desktop features a deck view to easily browse multiple timelines side-by-side. Linux, macOS, and Windows versions are available.
+## Highlights
 
-## Features
+- **Unified AI & Intelligence Hub:** Direct access to frontier AI updates and tools like **Staying Ahead AI**, ChatGPT, Claude, Perplexity, and Gemini, alongside curated newsfeeds and newsletters.
+- **Deck & Multi-Timeline View:** Browse multiple feeds, profiles, and timelines side-by-side on desktop with intuitive multi-tab and split-deck workspaces.
+- **Distraction-Free & Privacy-Focused:** Built-in ad guard, tracker protection (EasyList & EasyPrivacy), and anonymous reading modes for platforms like Facebook, Instagram, Threads, and X.
+- **Multi-Profile Isolation:** Separate cookie storage, cache, and authentication sessions per profile—switch accounts cleanly with zero interference.
+- **Deep Topic & Tag Watching:** Follow topics, tags, and publications directly (e.g. `https://stayingahead.ai/daily-ai-updates`, Medium tags, Substack publications, WordPress categories, and RSS/Atom feeds).
+- **Native Cross-Platform Performance:** Lightweight, fluid, and optimized for desktop operating systems (Linux, Windows, macOS) and web browsers.
 
-- **Unified Intelligence Feed:** Aggregate posts, articles, and newsletters from social media, blogging platforms, and RSS feeds in one organized stream.
-- **Platform Feed Filter:** Quickly filter feeds by platform with one tap (All, X, Bluesky, Mastodon, Threads, Reddit, Facebook, Instagram, TikTok, Medium, Substack, WordPress, RSS).
-- **Deep Topic & Tag Watching:** Follow topics, tags, and publications directly (e.g. `https://medium.com/tag/artificial-intelligence`, Substack sections, WordPress categories, and RSS/Atom feeds).
-- **Deck & Multi-timeline View:** Browse multiple feeds, profiles, and timelines side-by-side on desktop.
-- **No Ads & Built-in Blocklist:** Clean reading experience with built-in ad guard and EasyList/EasyPrivacy blocklists.
-- **Multiple Accounts:** Separate cookie storage per profile for managing multiple accounts cleanly.
-- **Anonymous Mode:** Hide sign-in and open-in-app prompts on Facebook, Instagram, Threads, Tumblr, and X; read without an account.
-- **Search Public Posts:** Search public discussions and posts without signing in (via DuckDuckGo).
-- **Media Download:** Save images and videos from supported platforms directly.
-- **Customization & Dark Mode:** Custom CSS styling, dark/light themes, zoom control, and configurable refresh intervals.
+---
 
 ## Supported Platforms
 
+### AI & Intelligence Hubs
+- **Staying Ahead AI:** Direct daily AI dispatches and updates (`https://stayingahead.ai/daily-ai-updates`).
+- **Frontier AI Models:** Quick-access preset bookmarks and workspace tabs for ChatGPT, Claude, Perplexity, and Gemini.
+
 ### Social Networks
+- **LinkedIn** (with streamlined Google OAuth login support)
 - **X (Twitter)**
 - **Bluesky**
 - **Mastodon**
 - **Threads**
 - **Reddit**
-- **LinkedIn**
 - **Facebook**
 - **Instagram**
 - **TikTok**
 - **Tumblr**
 - **VK**
 
-### Publishing & Blogging Platforms
-- **Medium:** User profiles (`@username`), publications (`publication.com`), and topics/tags (`medium.com/tag/artificial-intelligence`).
+### Publishing, Blogs & RSS
+- **Medium:** User profiles (`@username`), publications, and topics/tags (`medium.com/tag/artificial-intelligence`).
 - **Substack:** Newsletters, author profiles, and publication sections (`publication.substack.com`, custom domains).
 - **WordPress:** Self-hosted and WordPress.com blogs, tags, and category feeds.
 - **RSS & Atom:** Direct support for standard RSS 2.0 and Atom 1.0 feeds (AI research blogs, tech newsletters, publication feeds).
 
-## Getting Started
+---
 
-### Desktop Development
+## Installation & Setup
 
-```sh
-# Run desktop in development mode
+### Prerequisites
+
+Ensure you have the following installed on your machine:
+- **Node.js**: v20 or higher
+- **Bun**: v1.1 or higher ([Install Bun](https://bun.sh))
+- **Git**
+
+---
+
+### 1. Clone the Repository
+
+```bash
+git clone https://github.com/OS3Infotech/Synora.git
+cd Synora
+```
+
+---
+
+### 2. Install Dependencies
+
+Install root workspace and desktop dependencies:
+
+```bash
+# Link local packages and install dependencies
+bun link
+bun install
+
+# Bundle browser content scripts
+bun run bundle
+```
+
+---
+
+### 3. Development Mode
+
+#### Running Desktop (Electron)
+Launch the desktop application with live reload:
+
+```bash
 cd desktop
 bun run dev
 ```
 
-### Production Build
+#### Running Web (Expo)
+Start the web development server:
 
-```sh
-# Bundle web assets
-bun run bundle
-
-# Build desktop application
-cd desktop
-bun run build
-
-# Start preview
+```bash
 bun run start
+# Press 'w' to open in browser
 ```
 
-### Running Tests
+---
 
-Run the full test suite with Bun:
+### 4. How to Package & Install for Desktop
 
-```sh
+Synora uses `electron-builder` to produce native installers for all major desktop platforms.
+
+#### Linux (`.AppImage` / `.snap`)
+To package Synora for Linux:
+
+```bash
+cd desktop
+bun run build:linux
+```
+*Generated installers are located in `desktop/dist/` (`Synora-0.9.2.AppImage`, `synora_0.9.2_amd64.snap`).*
+
+To install/run the `.AppImage`:
+```bash
+chmod +x desktop/dist/Synora-*.AppImage
+./desktop/dist/Synora-*.AppImage
+```
+
+#### Windows (`.exe` / `.appx`)
+To package Synora for Windows (NSIS installer or AppX):
+
+```bash
+cd desktop
+bun run build:win
+```
+*Generated installer is located in `desktop/dist/` (`Synora-0.9.2-setup.exe`). Double-click the `.exe` to install.*
+
+#### macOS (`.dmg` / `.zip`)
+To package Synora for macOS:
+
+```bash
+cd desktop
+bun run build:mac
+```
+*Generated installer is located in `desktop/dist/` (`Synora-0.9.2-arm64.dmg` or `Synora-0.9.2-x64.dmg`). Open the `.dmg` and drag Synora to your Applications folder.*
+
+#### Unpacked Directory (Local Testing)
+To generate an unpacked executable folder without building a full installer:
+
+```bash
+cd desktop
+bun run build:unpack
+```
+
+---
+
+### 5. Running Tests
+
+Run the full automated test suite (including unit tests for Google OAuth handling, service routing, and link dispatching):
+
+```bash
 bun test
 ```
 
-## Screenshots
-
-<img src="metadata/en-US/images/phoneScreenshots/1.png" width="240" alt="Social browser home"> <img src="metadata/en-US/images/phoneScreenshots/2.png" width="240" alt="Feed timeline"> <img src="metadata/en-US/images/phoneScreenshots/3.png" width="240" alt="Photo and video grid">
-
-<img src="metadata/en-US/images/phoneScreenshots/4.png" width="240" alt="Manage feed sources"> <img src="metadata/en-US/images/phoneScreenshots/5.png" width="240" alt="Profiles and sessions"> <img src="metadata/en-US/images/phoneScreenshots/6.png" width="240" alt="Tabs">
+---
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for development and testing instructions.
+Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines, code style, and testing details.
 
-## Translation
+## License
 
-Translation is supported by [Weblate](https://hosted.weblate.org/projects/nora).
+This project is licensed under the terms described in the [LICENSE](LICENSE) file.

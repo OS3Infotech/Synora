@@ -22,6 +22,7 @@ const intentFilters = [
       'www.tumblr.com',
       'm.vk.com',
       'x.com',
+      'stayingahead.ai',
     ].map((host) => ({ scheme: 'https', host })),
     category: ['BROWSABLE', 'DEFAULT'],
   },
@@ -29,8 +30,8 @@ const intentFilters = [
 
 module.exports = ({ config }: { config: ExpoConfig }) => {
   return {
-    name: 'AIPulse',
-    slug: 'aipulse',
+    name: 'Synora',
+    slug: 'synora',
     version,
     icon: './assets/images/icon.png',
     scheme: 'nora',

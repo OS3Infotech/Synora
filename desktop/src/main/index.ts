@@ -150,7 +150,7 @@ function createWindow(): void {
 
   // Create the browser window.
   const mainWindow = new BrowserWindow({
-    title: 'AIPulse',
+    title: 'Synora',
     width: Math.floor(width * 0.9),
     height: Math.floor(height * 0.9),
     show: false,

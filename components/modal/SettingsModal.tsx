@@ -448,7 +448,7 @@ export const SettingsModal = ({ children }: { children?: ReactNode }) => {
     return (
       <View className="gap-6">
         <View className="rounded-[28px] bg-white dark:bg-zinc-900 px-5 py-5">
-          <NouText className="text-[11px] uppercase tracking-[0.18em] text-zinc-600 dark:text-zinc-500">AIPulse</NouText>
+          <NouText className="text-[11px] uppercase tracking-[0.18em] text-zinc-600 dark:text-zinc-500">Synora</NouText>
           <NouText className="mt-2 text-xl font-semibold tracking-tight">v{appVersion}</NouText>
           <NouText className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Stay Connected to the Pulse of AI.</NouText>
           {isWeb && supportsUpdateChecks ? (

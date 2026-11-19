@@ -17,6 +17,7 @@ import {
   IconSubstack,
   IconWordPress,
   IconRss,
+  IconStayingAhead,
 } from '../icons/Icons'
 import { Image } from 'expo-image'
 import { Text, View } from 'react-native'
@@ -46,6 +47,7 @@ export const services: Record<string, [string, () => ReactNode]> = {
   medium: ['Medium', () => <IconMedium />],
   substack: ['Substack', () => <IconSubstack />],
   wordpress: ['WordPress', () => <IconWordPress />],
+  stayingahead: ['Staying Ahead AI', () => <IconStayingAhead />],
   rss: ['Blog / RSS', () => <IconRss />],
 }
 

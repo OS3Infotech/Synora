@@ -26,6 +26,7 @@ export const homeUrls: Record<string, string> = {
   medium: 'https://medium.com',
   substack: 'https://substack.com',
   wordpress: 'https://wordpress.com',
+  stayingahead: 'https://stayingahead.ai/daily-ai-updates',
 }
 
 export function getHomeUrl(home: string) {

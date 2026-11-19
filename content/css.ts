@@ -18,6 +18,8 @@ export const hostHomes: Record<string, string> = {
   'medium.com': 'medium',
   'substack.com': 'substack',
   'wordpress.com': 'wordpress',
+  'stayingahead.ai': 'stayingahead',
+  'www.stayingahead.ai': 'stayingahead',
 }
 
 const injectedStyleId = '_nora_injected_css'

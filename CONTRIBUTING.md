@@ -1,4 +1,4 @@
-# Contributing to AIPulse
+# Contributing to Synora
 
 ## Development
 

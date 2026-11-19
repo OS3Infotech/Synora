@@ -17,6 +17,8 @@ const VIEW_HOSTS = new Set([
   'medium.com',
   'substack.com',
   'wordpress.com',
+  'stayingahead.ai',
+  'www.stayingahead.ai',
 ])
 
 const INTERNAL_SCHEMES = new Set(['about', 'blob', 'data', 'file', 'http', 'https', 'javascript', 'nora'])

@@ -50,6 +50,13 @@ export const presetBookmarks: PresetBookmark[] = [
   },
   { id: 'preset-messaging-slack', groupId: 'preset-messaging', title: 'Slack', url: 'https://slack.com/signin' },
   { id: 'preset-ai-chatgpt', groupId: 'preset-ai', title: 'ChatGPT', url: 'https://chatgpt.com' },
+  {
+    id: 'preset-ai-stayingahead',
+    groupId: 'preset-ai',
+    title: 'Staying Ahead AI',
+    url: 'https://stayingahead.ai/daily-ai-updates',
+    icon: 'https://stayingahead.ai/favicon.svg',
+  },
   { id: 'preset-ai-claude', groupId: 'preset-ai', title: 'Claude', url: 'https://claude.ai' },
   { id: 'preset-ai-gemini', groupId: 'preset-ai', title: 'Gemini', url: 'https://gemini.google.com' },
   { id: 'preset-ai-perplexity', groupId: 'preset-ai', title: 'Perplexity', url: 'https://www.perplexity.ai' },

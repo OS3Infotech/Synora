@@ -1,5 +1,5 @@
-appId: jp.nonbili.aipulse
-productName: AIPulse
+appId: com.os3infotech.synora
+productName: Synora
 directories:
   buildResources: build
 files:
@@ -14,7 +14,7 @@ files:
 asarUnpack:
   - resources/**
 protocols:
-  - name: AIPulse
+  - name: Synora
     schemes:
       - nora
 win:
