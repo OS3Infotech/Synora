@@ -1,4 +1,4 @@
 provider: github
-owner: nonbili
-repo: Nora-Desktop
-updaterCacheDirName: nora-desktop-updater
+owner: OS3Infotech
+repo: Synora
+updaterCacheDirName: synora-desktop-updater

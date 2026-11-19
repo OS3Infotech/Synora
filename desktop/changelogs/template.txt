@@ -1,5 +1,5 @@
 | Linux | macOS (x64) | macOS (arm64) | Windows |
 | - | - | - | - |
-| [Download](https://github.com/nonbili/Nora-Desktop/releases/download/v{VER}/Nora-{VER}.AppImage) | [Download](https://github.com/nonbili/Nora-Desktop/releases/download/v{VER}/Nora-{VER}-x64.dmg) | [Download](https://github.com/nonbili/Nora-Desktop/releases/download/v{VER}/Nora-{VER}-arm64.dmg) | [Download](https://github.com/nonbili/Nora-Desktop/releases/download/v{VER}/Nora-{VER}-setup.exe) |
+| [Download](https://github.com/OS3Infotech/Synora/releases/download/v{VER}/Synora-{VER}.AppImage) | [Download](https://github.com/OS3Infotech/Synora/releases/download/v{VER}/Synora-{VER}-x64.dmg) | [Download](https://github.com/OS3Infotech/Synora/releases/download/v{VER}/Synora-{VER}-arm64.dmg) | [Download](https://github.com/OS3Infotech/Synora/releases/download/v{VER}/Synora-{VER}-setup.exe) |
 
 ## Changelogs

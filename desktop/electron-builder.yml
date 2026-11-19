@@ -51,5 +51,5 @@ snap:
 npmRebuild: false
 publish:
   provider: github
-  owner: nonbili
-  repo: Nora-Desktop
+  owner: OS3Infotech
+  repo: Synora

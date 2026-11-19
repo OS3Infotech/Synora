@@ -2,8 +2,9 @@ name: Build desktop
 
 on:
   push:
-    branches:
-      - release-desktop
+    tags:
+      - 'v*'
+  workflow_dispatch:
 
 defaults:
   run:
@@ -50,10 +51,12 @@ jobs:
       - name: pkg on mac
         if: startsWith(matrix.os, 'mac')
         run: |
-          echo -n "${{ secrets.INSTALLER_CERT }}" | base64 -d > installer.cer
-          echo -n "${{ secrets.APPLICATION_CERT }}" | base64 -d > application.cer
-          sudo security add-trusted-cert -d -r trustRoot -k ~/Library/Keychains/login.keychain installer.cer
-          sudo security add-trusted-cert -d -r trustRoot -k ~/Library/Keychains/login.keychain application.cer
+          if [ -n "${{ secrets.APPLICATION_CERT }}" ]; then
+            echo -n "${{ secrets.INSTALLER_CERT }}" | base64 -d > installer.cer
+            echo -n "${{ secrets.APPLICATION_CERT }}" | base64 -d > application.cer
+            sudo security add-trusted-cert -d -r trustRoot -k ~/Library/Keychains/login.keychain installer.cer
+            sudo security add-trusted-cert -d -r trustRoot -k ~/Library/Keychains/login.keychain application.cer
+          fi
           bun electron-builder --x64 --arm64 --publish never
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
@@ -90,6 +93,8 @@ jobs:
   release:
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -107,6 +112,7 @@ jobs:
           echo "TAG=v$VER" >> $GITHUB_ENV
 
       - name: find snap artifact
+        if: env.SNAPCRAFT_STORE_CREDENTIALS != ''
         id: snap
         working-directory: .
         run: |
@@ -117,8 +123,11 @@ jobs:
             exit 1
           fi
           echo "path=${snaps[0]}" >> "$GITHUB_OUTPUT"
+        env:
+          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
 
       - name: publish snap
+        if: env.SNAPCRAFT_STORE_CREDENTIALS != ''
         uses: snapcore/action-publish@v1
         env:
           SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
@@ -131,6 +140,6 @@ jobs:
         with:
           body_path: desktop/note.txt
           files: dist/*
-          repository: nonbili/Nora-Desktop
-          token: ${{ secrets.GH_RELEASE_TOKEN }}
+          repository: ${{ github.repository }}
+          token: ${{ secrets.GITHUB_TOKEN }}
           tag_name: ${{ env.TAG }}

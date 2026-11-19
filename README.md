@@ -4,6 +4,13 @@
 
 A modern intelligence workspace and multi-platform feed browser designed to keep you seamlessly connected to the latest AI breakthroughs, daily updates, discussions, research, and publications. Available on Desktop (**Linux, macOS, Windows**), Web, Android, and iOS.
 
+[<img src="https://img.shields.io/badge/Direct_Installers-Windows_%7C_macOS_%7C_Linux-0D96F6?style=for-the-badge&logo=windows&logoColor=white"
+      alt="Download Direct Installers"
+      height="45">](https://github.com/OS3Infotech/Synora/releases)
+[<img src="https://img.shields.io/badge/GitHub-Releases-100000?style=for-the-badge&logo=github"
+      alt="GitHub Releases"
+      height="45">](https://github.com/OS3Infotech/Synora/releases)
+
 ---
 
 ## Highlights

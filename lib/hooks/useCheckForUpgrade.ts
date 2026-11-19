@@ -34,7 +34,7 @@ export function useCheckForUpgrade() {
       // including for portable builds without an auto-updater.
       const response = await window.electron.ipcRenderer.invoke(
         MAIN_CHANNEL, 'fetchText',
-        'https://api.github.com/repos/nonbili/Nora-Desktop/releases/latest',
+        'https://api.github.com/repos/OS3Infotech/Synora/releases/latest',
         { accept: 'application/vnd.github+json' },
       )
       if (response?.status !== 200) throw new Error('Failed to check for upgrades')
@@ -48,7 +48,7 @@ export function useCheckForUpgrade() {
           t('upgrade.available', { version: release.tag_name }),
           t('upgrade.download'),
           () => {
-            void Linking.openURL(`https://github.com/nonbili/Nora-Desktop/releases/tag/${encodeURIComponent(release.tag_name)}`)
+            void Linking.openURL(`https://github.com/OS3Infotech/Synora/releases/tag/${encodeURIComponent(release.tag_name)}`)
               .catch(() => showToast(t('upgrade.failed')))
           },
         )

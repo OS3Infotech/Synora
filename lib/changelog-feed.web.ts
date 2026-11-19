@@ -1,6 +1,6 @@
 import { MAIN_CHANNEL } from '../desktop/src/main/ipc/constants'
 
-const DESKTOP_RELEASES_FEED_URL = 'https://github.com/nonbili/Nora-Desktop/releases.atom'
+const DESKTOP_RELEASES_FEED_URL = 'https://github.com/OS3Infotech/Synora/releases.atom'
 
 type ElectronWindow = Window & {
   electron?: {
