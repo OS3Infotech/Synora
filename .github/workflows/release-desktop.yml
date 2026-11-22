@@ -77,10 +77,14 @@ jobs:
       - name: prepare release note
         shell: bash
         run: |
-          VER=$(jq -r '.version' ../package.json)
-          sed -i "s/{VER}/$VER/g" changelogs/template.txt
-          cat changelogs/template.txt changelogs/v$VER.txt > note.txt
-          echo "TAG=v$VER" >> $GITHUB_ENV
+          node -e '
+            const fs = require("fs");
+            const ver = require("../package.json").version;
+            const tpl = fs.readFileSync("changelogs/template.txt", "utf8").replaceAll("{VER}", ver);
+            const cl = fs.readFileSync("changelogs/v" + ver + ".txt", "utf8");
+            fs.writeFileSync("note.txt", tpl + "\n" + cl);
+            fs.appendFileSync(process.env.GITHUB_ENV, "TAG=v" + ver + "\n");
+          '
 
       - name: publish to release
         uses: softprops/action-gh-release@v2
