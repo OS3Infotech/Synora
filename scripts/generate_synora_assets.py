@@ -153,6 +153,16 @@ def main():
     desktop_icon.save(os.path.join(ROOT_DIR, "desktop/icon.png"))
     desktop_icon.save(os.path.join(ROOT_DIR, "desktop/resources/icon.png"))
 
+    build_dir = os.path.join(ROOT_DIR, "desktop/build")
+    os.makedirs(build_dir, exist_ok=True)
+    desktop_icon.save(os.path.join(build_dir, "icon.png"))
+
+    print("Generating desktop/build/icon.ico (Windows multi-resolution icon)...")
+    ico_sizes = [(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)]
+    desktop_icon.save(os.path.join(build_dir, "icon.ico"), format='ICO', sizes=ico_sizes)
+    desktop_icon.save(os.path.join(build_dir, "installerIcon.ico"), format='ICO', sizes=ico_sizes)
+    desktop_icon.save(os.path.join(build_dir, "uninstallerIcon.ico"), format='ICO', sizes=ico_sizes)
+
     # 3. Windows AppX Tile Assets
     print("Generating desktop/build/appx/ assets...")
     appx_dir = os.path.join(ROOT_DIR, "desktop/build/appx")

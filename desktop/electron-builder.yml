@@ -18,12 +18,15 @@ protocols:
     schemes:
       - nora
 win:
+  icon: build/icon.ico
   executableName: nora
 nsis:
   artifactName: ${productName}-${version}-setup.${ext}
   shortcutName: ${productName}
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always
+  installerIcon: build/installerIcon.ico
+  uninstallerIcon: build/uninstallerIcon.ico
 appx:
   artifactName: ${productName}-${version}.${ext}
   identityName: NonbiliInc.Nora
