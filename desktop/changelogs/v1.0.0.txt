@@ -1,5 +1,8 @@
 - Official Synora 1.0.0 Release: Everything connected in one intelligent space
+- Official Synora Brand Identity: New radiant cyan emblem and brand assets across all platforms
+- Windows Installer & Taskbar: Added high-resolution Windows ICO and installer branding
 - Integrated Staying Ahead AI (daily-ai-updates) platform with custom icon and multi-tab routing
+- AI Communities in Feed: Discover and load curated AI communities and custom feeds
 - Fixed Google OAuth authentication on Desktop (LinkedIn and social sign-in)
 - Enhanced internal multi-tab link dispatching and workspace views
 - Direct installers for Windows (.exe), macOS (.dmg), and Linux (.AppImage)

@@ -1,4 +1,0 @@
-- Official Synora Brand Identity: New radiant cyan emblem and brand assets across all platforms
-- Windows Installer & Taskbar: Added high-resolution Windows ICO and installer branding
-- AI Communities in Feed: Discover and load curated AI communities and custom feeds
-- Performance and stability improvements across Desktop, Mobile, and Web
