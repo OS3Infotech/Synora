@@ -21,6 +21,8 @@ jobs:
           - macos-15
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
+    permissions:
+      contents: write
 
     steps:
       - uses: actions/checkout@v4
@@ -72,13 +74,23 @@ jobs:
         if: startsWith(matrix.os, 'ubuntu') || startsWith(matrix.os, 'win')
         run: bun electron-builder --publish never
 
-      - name: upload artifacts
-        uses: actions/upload-artifact@v6
+      - name: prepare release note
+        shell: bash
+        run: |
+          VER=$(jq -r '.version' ../package.json)
+          sed -i "s/{VER}/$VER/g" changelogs/template.txt
+          cat changelogs/template.txt changelogs/v$VER.txt > note.txt
+          echo "TAG=v$VER" >> $GITHUB_ENV
+
+      - name: publish to release
+        uses: softprops/action-gh-release@v2
         with:
-          name: ${{ matrix.os }}
-          path: |
-            desktop/dist/latest.yml
-            desktop/dist/latest-*.yml
+          tag_name: ${{ env.TAG }}
+          body_path: desktop/note.txt
+          repository: ${{ github.repository }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          files: |
+            desktop/dist/latest*.yml
             desktop/dist/*.AppImage
             desktop/dist/*.snap
             desktop/dist/*.appx
@@ -86,58 +98,3 @@ jobs:
             desktop/dist/*.dmg
             desktop/dist/*.exe
             desktop/dist/*.zip
-
-  release:
-    needs: build
-    if: always()
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: download artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: dist
-          merge-multiple: true
-
-      - name: prepare release note
-        run: |
-          VER=$(jq -r '.version' package.json)
-          sed -i "s/{VER}/$VER/g" changelogs/template.txt
-          cat changelogs/template.txt changelogs/v$VER.txt > note.txt
-          echo "TAG=v$VER" >> $GITHUB_ENV
-
-      - name: find snap artifact
-        if: env.SNAPCRAFT_STORE_CREDENTIALS != ''
-        id: snap
-        working-directory: .
-        run: |
-          set -euo pipefail
-          mapfile -t snaps < <(find dist -maxdepth 1 -type f -name '*.snap')
-          if [ "${#snaps[@]}" -ne 1 ]; then
-            echo "::error::Expected exactly one snap artifact, found ${#snaps[@]}."
-            exit 1
-          fi
-          echo "path=${snaps[0]}" >> "$GITHUB_OUTPUT"
-        env:
-          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
-
-      - name: publish snap
-        if: env.SNAPCRAFT_STORE_CREDENTIALS != ''
-        uses: snapcore/action-publish@v1
-        env:
-          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
-        with:
-          snap: ${{ steps.snap.outputs.path }}
-          release: stable
-
-      - name: release
-        uses: softprops/action-gh-release@v2
-        with:
-          body_path: desktop/note.txt
-          files: dist/*
-          repository: ${{ github.repository }}
-          token: ${{ secrets.GITHUB_TOKEN }}
-          tag_name: ${{ env.TAG }}
