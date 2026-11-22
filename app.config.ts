@@ -52,7 +52,7 @@ module.exports = ({ config }: { config: ExpoConfig }) => {
       adaptiveIcon: {
         foregroundImage: './assets/images/adaptive-icon.png',
         monochromeImage: './assets/images/monochrome-icon.png',
-        backgroundColor: '#ffffff',
+        backgroundColor: '#252c35',
       },
       predictiveBackGestureEnabled: false,
       package: 'jp.nonbili.nora',
@@ -98,10 +98,10 @@ module.exports = ({ config }: { config: ExpoConfig }) => {
           image: './assets/images/splash-icon.png',
           imageWidth: 200,
           resizeMode: 'contain',
-          backgroundColor: '#f9fafb',
+          backgroundColor: '#252c35',
           dark: {
             image: './assets/images/splash-icon.png',
-            backgroundColor: '#27272a',
+            backgroundColor: '#1c222a',
           },
         },
       ],
