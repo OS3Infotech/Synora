@@ -3,3 +3,4 @@
 - Added profile switcher component with unit test coverage
 - Improved desktop tab navigation, workspaces, and UI reactivity
 - Updated documentation and investigation reports for Google SSO
+
