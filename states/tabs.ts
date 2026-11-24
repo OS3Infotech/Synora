@@ -282,7 +282,11 @@ const resolveOpenProfile = (url: string, options?: OpenTabOptions): Pick<Tab, 'p
   const parentTab = options?.parentTabId ? tabs.find((tab) => tab.id === options.parentTabId) : undefined
   const requestedAuto = options?.profile === AUTO_PROFILE_ID || options?.profileMode === 'auto'
   const requestedProfile = requestedAuto ? undefined : options?.profile
-  const fallbackProfile = requestedProfile || ui$.lastSelectedProfileId.get() || 'default'
+  const chosenProfile = ui$.lastSelectedProfileId.get()
+  const activeProfile = settings$.selectedProfileId?.get()
+  const effectiveChosen = chosenProfile && chosenProfile !== 'all' ? chosenProfile : undefined
+  const effectiveActive = activeProfile && activeProfile !== 'all' ? activeProfile : undefined
+  const fallbackProfile = requestedProfile || effectiveChosen || effectiveActive || 'default'
   // The feed tab has no site of its own: what it opens takes the profile of its own site.
   const inheritsParentProfile = options?.source === 'child' && parentTab?.profile && !isFeedTabUrl(parentTab.url)
 
@@ -393,13 +397,13 @@ export const tabs$: Observable<Store> = observable<Store>({
 
   openTab: (url, options): string | undefined => {
     const cleaned = removeTrackingParams(url.replace('nora://', 'https://'))
-    if (cleaned && cleaned === lastOpenedUrl) {
+    if (options?.source === 'shared' && cleaned && cleaned === lastOpenedUrl) {
       return undefined
     }
     lastOpenedUrl = cleaned
     setTimeout(() => {
       lastOpenedUrl = ''
-    }, 1000)
+    }, 200)
 
     // Each feed tab can show a timeline of its own.
     if (settings$.oneTabPerSite.get() && !isFeedTabUrl(url)) {
@@ -975,6 +979,19 @@ export const restoreTabsState = <T extends PersistedTabs>(data: T): T => {
     }
     if (data.activeTabIndex >= data.tabs.length) {
       data.activeTabIndex = data.tabs.length - 1
+    }
+
+    // When Synora starts, ensure it shows a new tab first, not feed
+    const activeUrl = data.tabs[data.activeTabIndex]?.url
+    if (isFeedTabUrl(activeUrl)) {
+      const existingNewTabIndex = data.tabs.findIndex((tab) => !tab.url)
+      if (existingNewTabIndex !== -1) {
+        data.activeTabIndex = existingNewTabIndex
+      } else {
+        const newTabId = genId()
+        data.tabs.unshift({ id: newTabId, url: '', backToNewTab: true })
+        data.activeTabIndex = 0
+      }
     }
 
     // Restore lazily: only the active tab mounts a webview now, the rest wait for

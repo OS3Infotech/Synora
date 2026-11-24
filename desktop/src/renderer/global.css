@@ -36,6 +36,14 @@
   outline: none;
 }
 
+webview {
+  display: inline-flex !important;
+  width: 100% !important;
+  height: 100% !important;
+  flex: 1 1 0% !important;
+  outline: none !important;
+}
+
 body {
   @apply bg-zinc-100 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100;
 }

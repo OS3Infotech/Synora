@@ -18,6 +18,11 @@ import {
   IconWordPress,
   IconRss,
   IconStayingAhead,
+  IconChatGPT,
+  IconClaude,
+  IconGemini,
+  IconHuggingFace,
+  IconYouTube,
 } from '../icons/Icons'
 import { Image } from 'expo-image'
 import { Text, View } from 'react-native'
@@ -49,6 +54,11 @@ export const services: Record<string, [string, () => ReactNode]> = {
   wordpress: ['WordPress', () => <IconWordPress />],
   stayingahead: ['Staying Ahead AI', () => <IconStayingAhead />],
   rss: ['Blog / RSS', () => <IconRss />],
+  chatgpt: ['ChatGPT', () => <IconChatGPT />],
+  claude: ['Claude', () => <IconClaude />],
+  gemini: ['Gemini', () => <IconGemini />],
+  huggingface: ['Hugging Face', () => <IconHuggingFace />],
+  youtube: ['YouTube', () => <IconYouTube />],
 }
 
 /** The icon of a site, also of one that is not a service, as Mastodon: it is on many servers. */

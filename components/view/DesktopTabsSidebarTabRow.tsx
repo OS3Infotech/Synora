@@ -88,10 +88,14 @@ export const TabRow = memo<{
         onPointerDown={(e) => {
           e.stopPropagation()
         }}
+        onClick={(e) => {
+          e.stopPropagation()
+          tabs$.closeTabsByIds([tab.id])
+        }}
       >
         <Pressable
           className="h-4 w-4 items-center justify-center rounded-full bg-white shadow-sm ring-1 ring-zinc-300 transition-colors hover:bg-zinc-100 hover:ring-zinc-400 dark:bg-zinc-700 dark:ring-zinc-600 dark:hover:bg-zinc-600 dark:hover:ring-zinc-500"
-          onPress={() => tabs$.closeTab(tabs$.tabs.get().findIndex((currentTab) => currentTab.id === tab.id))}
+          onPress={() => tabs$.closeTabsByIds([tab.id])}
         >
           <MaterialIcons name="close" size={10} color="#71717a" />
         </Pressable>
@@ -125,10 +129,19 @@ export const TabRow = memo<{
         </NouText>
       </View>
       <FeedTabIndicator url={tab.url} />
-      <div title={t('menus.close')}>
+      <div
+        title={t('menus.close')}
+        onPointerDown={(e) => {
+          e.stopPropagation()
+        }}
+        onClick={(e) => {
+          e.stopPropagation()
+          tabs$.closeTabsByIds([tab.id])
+        }}
+      >
         <Pressable
           className="h-5 w-5 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-zinc-300/70 dark:hover:bg-zinc-600"
-          onPress={() => tabs$.closeTab(tabs$.tabs.get().findIndex((currentTab) => currentTab.id === tab.id))}
+          onPress={() => tabs$.closeTabsByIds([tab.id])}
         >
           <MaterialIcons name="close" size={14} color="#71717a" />
         </Pressable>

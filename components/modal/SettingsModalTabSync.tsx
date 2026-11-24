@@ -4,7 +4,7 @@ import { Image } from 'expo-image'
 import { use$ } from '@legendapp/state/react'
 import { auth$ } from '@/states/auth'
 import { isWeb, isIos } from '@/lib/utils'
-import { openDeleteAccount, signOut } from '@/lib/supabase/auth'
+import { openDeleteAccount, signInWithGoogle, signOut } from '@/lib/supabase/auth'
 import { NouLink } from '../link/NouLink'
 import { NouMenu } from '../menu/NouMenu'
 import { capitalize } from 'es-toolkit'
@@ -60,6 +60,7 @@ export const SettingsModalTabSync = () => {
   const [actionError, setActionError] = useState<string>()
   const [notice, setNotice] = useState<string>()
   const [busyAction, setBusyAction] = useState<'buy' | 'restore' | 'manage' | null>(null)
+  const [signingIn, setSigningIn] = useState(false)
   const needsAccountChoice = use$(accountChoice$)
   const switchBackup = use$(syncOwner$.switchBackup)
   const [choosing, setChoosing] = useState<AccountChoice | null>(null)
@@ -226,6 +227,20 @@ export const SettingsModalTabSync = () => {
     { label: t('menus.signOut'), handler: signOut },
   ]
 
+  const onGoogleSignIn = async () => {
+    setSigningIn(true)
+    setActionError(undefined)
+    try {
+      await signInWithGoogle()
+    } catch (err: any) {
+      if (err?.message && !err.message.includes('cancelled')) {
+        setActionError(err.message)
+      }
+    } finally {
+      setSigningIn(false)
+    }
+  }
+
   if (!userId) {
     return (
       <View className="gap-6">
@@ -235,14 +250,21 @@ export const SettingsModalTabSync = () => {
             <View className="px-5 py-5">
               <NouText className="text-lg font-semibold">{t('sync.label')}</NouText>
               <NouText className="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-400">{syncHint}</NouText>
-              <View className="mt-5">
+              <View className="mt-5 gap-3">
+                <NouButton
+                  loading={signingIn}
+                  onPress={() => void onGoogleSignIn()}
+                >
+                  {t('sync.signInWithGoogle', 'Sign in with Google')}
+                </NouButton>
                 <NouLink
-                  className="rounded-full bg-zinc-900 px-5 py-2.5 text-center text-sm text-white dark:bg-zinc-100 dark:text-zinc-950"
+                  className="rounded-full border border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-950 px-5 py-2.5 text-center text-sm text-zinc-900 dark:text-zinc-100"
                   href="https://nora.inks.page/auth/app"
                   target="_blank"
                 >
-                  Login Synora
+                  {t('sync.signInWithEmail', 'Sign in with Email')}
                 </NouLink>
+                {actionError ? <NouText className="mt-1 text-sm text-red-400">{actionError}</NouText> : null}
               </View>
             </View>
           </View>

@@ -1,5 +1,5 @@
 import { useValue } from '@legendapp/state/react'
-import React, { useEffect, useRef } from 'react'
+import React, { useEffect, useMemo, useRef } from 'react'
 import { createLogger } from '@/lib/log'
 import { settings$ } from '@/states/settings'
 import { NouHeader } from '../header/NouHeader'
@@ -18,6 +18,7 @@ import { useAccountChoicePrompt } from '@/lib/hooks/useAccountChoicePrompt'
 import { UsageLockout } from '../lockout/UsageLockout'
 import { SettingsModal } from '../modal/SettingsModal'
 import { useDesktopLayout } from '@/lib/hooks/useDesktopLayout'
+import { isTabInProfile } from '@/lib/profile'
 const logger = createLogger('sync')
 // Coming back to the app syncs at most this often.
 const returnSyncThrottleMs = 30 * 1000
@@ -40,8 +41,16 @@ export const MainPageContent: React.FC<{ contentJs: string }> = ({ contentJs }) 
     }
   }, [globalSourcesScreen])
 
-  const tabs = useValue(tabs$.tabs)
+  const allTabs = useValue(tabs$.tabs)
   const desktopLayout = useDesktopLayout()
+  const selectedProfileId = useValue(settings$.selectedProfileId) || 'default'
+  const tabs = useMemo(
+    () =>
+      !desktopLayout || selectedProfileId === 'all'
+        ? allTabs
+        : allTabs.filter((tab) => isTabInProfile(tab, selectedProfileId)),
+    [allTabs, desktopLayout, selectedProfileId],
+  )
   // Android desktop mode gets the same workspace as the desktop app, laid out with
   // native views instead of DOM ones.
   const nativeDesktop = desktopLayout && !isWeb
@@ -89,9 +98,8 @@ export const MainPageContent: React.FC<{ contentJs: string }> = ({ contentJs }) 
       importantForAccessibility={globalSourcesScreen || (isAndroid && settingsModalOpen) ? 'no-hide-descendants' : 'auto'}
       className={clsx(
         'flex-1 h-full overflow-hidden bg-zinc-100 dark:bg-zinc-950',
-        !nativeDesktop && headerPosition === 'bottom' && 'flex-col-reverse',
-        isWeb && 'lg:flex-row',
-        nativeDesktop && 'flex-row',
+        !desktopLayout && headerPosition === 'bottom' && 'flex-col-reverse',
+        desktopLayout ? 'flex-row' : (isWeb && 'lg:flex-row'),
       )}
     >
       <NouHeader />

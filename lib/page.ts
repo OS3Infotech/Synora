@@ -7,7 +7,7 @@ import { isExternalAppUrl } from './url-schemes'
 import { parseTabShortcutUrl } from './tab-shortcut'
 import { tabGroups$ } from '@/states/tab-groups'
 import { ui$ } from '@/states/ui'
-import { feedTabUrl, getFeedTimelineId, isFeedTabUrl } from './feed-tab'
+import { feedTabUrl, getFeedTimelineId, isFeedTabUrl, SOCIAL_FEED_TIMELINE_ID } from './feed-tab'
 export { removeTrackingParams } from './url'
 export { isAuthCallbackUrl } from './auth-callback'
 
@@ -65,6 +65,11 @@ export function openFeedTab(timelineId?: string, newTab = false) {
   }
   tabGroups$.setActiveGroup(null)
   return tabs$.openTab(feedTabUrl(timelineId))
+}
+
+/** Opens or switches to the Social Feed tab showing social media updates only. */
+export function openSocialFeedTab(newTab = false) {
+  return openFeedTab(SOCIAL_FEED_TIMELINE_ID, newTab)
 }
 
 export async function openSharedUrl(url: string, replace = false) {

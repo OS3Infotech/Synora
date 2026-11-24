@@ -36,13 +36,15 @@ import {
 
 let Network: typeof import('expo-network') | undefined
 let Sharing: typeof import('expo-sharing') | undefined
-try {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  Network = require('expo-network')
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  Sharing = require('expo-sharing')
-} catch (e) {
-  console.warn('Failed to load expo-network or expo-sharing', e)
+if (typeof require !== 'undefined') {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    Network = require('expo-network')
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    Sharing = require('expo-sharing')
+  } catch (e) {
+    console.warn('Failed to load expo-network or expo-sharing', e)
+  }
 }
 
 /**

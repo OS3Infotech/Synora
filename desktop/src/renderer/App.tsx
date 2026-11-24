@@ -10,6 +10,9 @@ import { ImagePreview } from './components/ImagePreview'
 import { HoverLinkBar } from './components/HoverLinkBar'
 import { settings$ } from 'nora/states/settings'
 import { bookmarks$ } from 'nora/states/bookmarks'
+import { tabs$ } from 'nora/states/tabs'
+import { isFeedTabUrl } from 'nora/lib/feed-tab'
+import { openTabInDesktopGroup } from 'nora/lib/desktop-view-actions'
 import { homeUrls } from 'nora/lib/page'
 import { useBlocklistSync } from 'nora/lib/hooks/useBlocklistSync'
 
@@ -45,6 +48,19 @@ function App(): React.JSX.Element {
     initUiChannel()
     // Captured: react-native-web's TextInput stops every keydown, so a focused field would swallow them.
     window.addEventListener('keydown', handleShortcuts, true)
+
+    // When Synora opens, ensure it shows a new tab first, not feed
+    const allTabs = tabs$.tabs.get()
+    const current = tabs$.currentTab()
+    if (!current || isFeedTabUrl(current.url)) {
+      const existingNewTab = allTabs.find((t) => !t.url)
+      if (existingNewTab) {
+        tabs$.setActiveTabById(existingNewTab.id, 'user')
+      } else {
+        openTabInDesktopGroup(null, '')
+      }
+    }
+
     return () => window.removeEventListener('keydown', handleShortcuts, true)
   }, [])
 

@@ -27,9 +27,11 @@ export const SearchProviderIcon: React.FC<{
       ? getFaviconUrl('https://duckduckgo.com/?q=%s')
       : provider.id === 'google'
         ? getFaviconUrl('https://www.google.com/search?q=%s')
-        : provider.kind === 'custom'
-          ? provider.iconUrl
-          : undefined
+        : provider.id === 'brave'
+          ? getFaviconUrl('https://search.brave.com/search?q=%s')
+          : provider.kind === 'custom'
+            ? provider.iconUrl
+            : undefined
 
   if (faviconUrl) {
     return (

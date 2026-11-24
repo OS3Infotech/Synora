@@ -1,8 +1,18 @@
 /** The feed of watched profiles is shown in a tab of its own, at this address. */
 export const FEED_TAB_URL = 'nora://feed'
 
+/** Social feed — same tab as feed but pre-filtered to social sources only. */
+export const SOCIAL_FEED_TIMELINE_ID = '__social__'
+export const SOCIAL_FEED_TAB_URL = `${FEED_TAB_URL}?timeline=${encodeURIComponent(SOCIAL_FEED_TIMELINE_ID)}`
+
+/** Social sites that appear in the Social Feed. */
+export const SOCIAL_FEED_SITES = new Set(['instagram', 'facebook', 'x', 'threads', 'tiktok', 'bluesky', 'mastodon'])
+
 export const isFeedTabUrl = (url: string | null | undefined) =>
   !!url && (url === FEED_TAB_URL || url.startsWith(`${FEED_TAB_URL}?`))
+
+export const isSocialFeedTabUrl = (url: string | null | undefined) =>
+  !!url && url === SOCIAL_FEED_TAB_URL
 
 /** The address of a feed tab showing a timeline; the whole feed when there is none. */
 export const feedTabUrl = (timelineId?: string) =>

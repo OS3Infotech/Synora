@@ -53,6 +53,7 @@ const normalizeDesktopLayout = (value: unknown): DesktopLayoutMode =>
   value === 'on' || value === 'off' ? value : 'auto'
 
 export interface Settings {
+  selectedProfileId: string
   language: SupportedI18nLanguage | null
   autoHideHeader: boolean
   doubleTapToToggleHeader: boolean
@@ -246,6 +247,13 @@ export const normalizeSettings = <T extends Partial<Settings> | undefined>(data:
   if ('profiles' in data) {
     data.profiles = withAnonymousProfile(ensureProfiles(data.profiles), data.anonymousMode === true)
   }
+  if (typeof data.selectedProfileId !== 'string' || !data.selectedProfileId) {
+    data.selectedProfileId = DEFAULT_PROFILE_ID
+  }
+  const validProfileIds = new Set((data.profiles || []).map((p) => p.id))
+  if (data.selectedProfileId !== 'all' && !validProfileIds.has(data.selectedProfileId)) {
+    data.selectedProfileId = DEFAULT_PROFILE_ID
+  }
   data.customSearchProviders = normalizeCustomSearchProviders(data.customSearchProviders)
   data.enabledSearchProviderIds = normalizeEnabledSearchProviderIds(
     data.enabledSearchProviderIds,
@@ -401,11 +409,12 @@ export const settings$: Observable<Store> = observable<Store>({
   siteZoom: {},
 
   disabledServicesArr: [],
-  enabledSearchProviderIds: ['url', 'duckduckgo', 'google'],
+  enabledSearchProviderIds: ['url', 'duckduckgo', 'google', 'brave'],
   selectedSearchProviderId: 'url',
   selectedPublicSearchServiceId: DEFAULT_PUBLIC_SEARCH_SERVICE_ID,
   customSearchProviders: [],
   profiles: [DEFAULT_PROFILE],
+  selectedProfileId: DEFAULT_PROFILE_ID,
   setLanguage: (language) => {
     settings$.language.set(normalizeI18nLanguage(language))
   },
@@ -546,6 +555,9 @@ export const settings$: Observable<Store> = observable<Store>({
       if (id === ANONYMOUS_PROFILE_ID) {
         // The mode only acts in this profile, and would bring it back on the next start.
         settings$.anonymousMode.set(false)
+      }
+      if (settings$.selectedProfileId.get() === id) {
+        settings$.selectedProfileId.set(DEFAULT_PROFILE_ID)
       }
       settings$.profiles.splice(index, 1)
       void import('@/lib/profile-data')

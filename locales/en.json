@@ -149,6 +149,10 @@
   },
   "profiles": {
     "label": "Profiles",
+    "switchProfile": "Switch Profile",
+    "all": "All Profiles",
+    "manageProfiles": "Manage Profiles…",
+    "addProfile": "New Profile…",
     "currentProfile": "Profile: {{name}}",
     "auto": "Auto",
     "autoProfiles": "Auto profiles",
@@ -478,6 +482,8 @@
     "termsOfUse": "Terms of Use (EULA)",
     "privacyPolicy": "Privacy Policy",
     "signInRequired": "Sign in to continue.",
+    "signInWithGoogle": "Sign in with Google",
+    "signInWithEmail": "Sign in with Email",
     "accountChoiceTitle": "Data from another account",
     "accountChoiceMessage": "The bookmarks, settings, styles and feed on this device were synced with another Synora account. Sync is paused until you choose what to do with them.",
     "accountChoiceUseAccount": "Use this account's data",
@@ -509,7 +515,12 @@
   "newTab": {
     "presets": {
       "open": "Add preset bookmarks",
-      "title": "Preset bookmarks"
+      "title": "Preset bookmarks",
+      "apps": "Default Apps",
+      "edit": "Customize new tab",
+      "done": "Done",
+      "remove": "Remove",
+      "removeHint": "Tap any app to remove it from the new tab page"
     },
     "search": {
       "urlPlaceholder": "Enter a URL",

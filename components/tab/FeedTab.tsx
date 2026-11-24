@@ -1,12 +1,13 @@
 import { useEffect } from 'react'
 import { View } from 'react-native'
+import MaterialIcons from '@react-native-vector-icons/material-icons'
 import { useValue } from '@legendapp/state/react'
 import { t } from 'i18next'
 import { ui$ } from '@/states/ui'
 import { settings$ } from '@/states/settings'
 import { tabs$ } from '@/states/tabs'
 import { getTimeline, timelineEmoji } from '@/states/watch'
-import { getFeedTimelineId } from '@/lib/feed-tab'
+import { getFeedTimelineId, SOCIAL_FEED_TIMELINE_ID } from '@/lib/feed-tab'
 import { FeedTabIcon, FeedTabIndicator } from '@/components/service/Services'
 import { clsx, isAndroid, isWeb, nIf } from '@/lib/utils'
 import { NouText } from '../NouText'
@@ -45,8 +46,9 @@ export const FeedTab: React.FC<NoraTabProps> = ({
   })
   const shown = isWeb || desktopChrome ? desktopVisible : isActive
   const timelineId = getFeedTimelineId(tab.url)
+  const isSocialFeed = timelineId === SOCIAL_FEED_TIMELINE_ID
   const timelineName = useValue(() => getTimeline(timelineId)?.name)
-  const label = timelineName || t('feed.label')
+  const label = isSocialFeed ? 'Social Feed' : timelineName || t('feed.label')
   const emoji = useValue(() => timelineEmoji(timelineId))
 
   // Nothing loads here: the tab is ready as soon as it is there, and is not put to sleep.
@@ -80,7 +82,11 @@ export const FeedTab: React.FC<NoraTabProps> = ({
       <View className="min-w-0 flex-1 flex-row items-center justify-center">
         {slotSwitcher || (
           <View className="min-w-0 max-w-full flex-row items-center justify-center gap-2 px-2">
-            <FeedTabIcon emoji={emoji} size={20} />
+            {isSocialFeed ? (
+              <MaterialIcons name="people" size={18} color="#ec4899" />
+            ) : (
+              <FeedTabIcon emoji={emoji} size={20} />
+            )}
             <NouText
               className={clsx(
                 'min-w-0 flex-1 text-center text-[11px] font-bold tracking-wider',
@@ -94,7 +100,7 @@ export const FeedTab: React.FC<NoraTabProps> = ({
         )}
       </View>
       <FeedTabIndicator url={tab.url} />
-      <MaterialButton name="close" onPress={() => tabs$.closeTab(index)} style={toolbarButtonStyle} size={16} />
+      <MaterialButton name="close" onPress={() => tabs$.closeTabsByIds([tab.id])} style={toolbarButtonStyle} size={16} />
     </View>
   )
 

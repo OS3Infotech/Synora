@@ -35,6 +35,7 @@ import { colors } from '@/lib/colors'
 import { AUTO_PROFILE_ID, isSiteProfileId } from '@/lib/site-profile'
 import { BaseCenterModal } from './BaseCenterModal'
 import { presetBookmarkGroups, presetBookmarks } from '@/lib/preset-bookmarks'
+import { isTabInProfile } from '@/lib/profile'
 import { useTwColor } from '@/lib/theme'
 
 const cls =
@@ -59,6 +60,8 @@ export const NavModalContent: React.FC<NavModalContentProps> = ({
   const disabledServices = useValue(settings$.disabledServicesArr)
   const profiles = useValue(settings$.profiles)
   const bookmarks = useValue(bookmarks$.bookmarks)
+  const feedPinned = useValue(watch$.feedPinned)
+  const feedEnabled = useValue(settings$.feedEnabled)
   // The whole feed, then the timelines pinned here, each with its unread count.
   const feedLinks = useValue(() =>
     !settings$.feedEnabled.get()
@@ -77,7 +80,9 @@ export const NavModalContent: React.FC<NavModalContentProps> = ({
   const [input, setInput] = useState('')
   const [providerPickerOpen, setProviderPickerOpen] = useState(false)
   const [presetPickerOpen, setPresetPickerOpen] = useState(false)
-  const [selectedPresetGroupId, setSelectedPresetGroupId] = useState(presetBookmarkGroups[0].id)
+  const [isEditing, setIsEditing] = useState(false)
+  const DEFAULT_APPS_GROUP_ID = 'preset-default-apps'
+  const [selectedPresetGroupId, setSelectedPresetGroupId] = useState(DEFAULT_APPS_GROUP_ID)
   const [providerAnchor, setProviderAnchor] = useState<Anchor | null>(null)
   const awaitingCreatedProfileRef = useRef(false)
   const createdProfileId = useValue(ui$.createdProfileId)
@@ -87,6 +92,7 @@ export const NavModalContent: React.FC<NavModalContentProps> = ({
   const isDark = colorScheme !== 'light'
   const insets = useSafeAreaInsets()
   const oneProfilePerSite = useValue(settings$.oneProfilePerSite)
+  const selectedProfileSetting = useValue(settings$.selectedProfileId) || 'default'
   const selectedProfile =
     profileId ||
     (oneProfilePerSite &&
@@ -94,13 +100,47 @@ export const NavModalContent: React.FC<NavModalContentProps> = ({
         isSiteProfileId(currentTab?.profile) ||
         (!currentTab?.profileMode && (!currentTab?.profile || currentTab.profile === 'default')))
       ? AUTO_PROFILE_ID
-      : currentTab?.profile || 'default')
+      : currentTab?.profile || selectedProfileSetting)
   const enabledSearchProviders = getEnabledSearchProviders(enabledSearchProviderIds, customSearchProviders)
   const selectedSearchProvider =
     getResolvedSearchProvider(selectedSearchProviderId, customSearchProviders) || enabledSearchProviders[0]
   const isUrlMode = selectedSearchProvider?.kind === 'url'
   const bookmarkIndexByUrl = new Map(bookmarks.map((bookmark, index) => [bookmark.url, index]))
   const visiblePresetBookmarks = presetBookmarks.filter((bookmark) => bookmark.groupId === selectedPresetGroupId)
+  const allPresetBookmarkGroups = [
+    { id: DEFAULT_APPS_GROUP_ID, title: t('newTab.presets.apps') || 'Default Apps' },
+    ...presetBookmarkGroups,
+  ]
+  const defaultAppEntries: Array<{
+    id: string
+    title: string
+    icon: () => React.ReactNode
+    isEnabled: boolean
+    toggle: () => void
+  }> = [
+    ...(feedEnabled
+      ? [
+          {
+            id: '__feed__',
+            title: t('feed.label') || 'Feed',
+            icon: () => (
+              <View className="h-6 w-6 items-center justify-center">
+                <Text style={{ fontSize: 18, lineHeight: 22 }}>{watch$.feedEmoji.get() || DEFAULT_TIMELINE_EMOJI}</Text>
+              </View>
+            ),
+            isEnabled: feedPinned,
+            toggle: () => watch$.feedPinned.set(!feedPinned),
+          },
+        ]
+      : []),
+    ...Object.entries(services).map(([value, [label, icon]]) => ({
+      id: value,
+      title: label,
+      icon,
+      isEnabled: !disabledServices.includes(value),
+      toggle: () => settings$.toggleService(value),
+    })),
+  ]
 
   const openProviderPicker = () => {
     providerTriggerRef.current?.measureInWindow((x, y, width, height) => {
@@ -121,7 +161,7 @@ export const NavModalContent: React.FC<NavModalContentProps> = ({
   const selectProfile = (profileId: string) => {
     if (onSelectProfile) {
       onSelectProfile(profileId)
-    } else {
+    } else if (typeof index === 'number') {
       const tabId = tabs$.tabs[index]?.id.peek()
       if (tabId) {
         tabs$.setTabProfile(tabId, profileId)
@@ -129,6 +169,26 @@ export const NavModalContent: React.FC<NavModalContentProps> = ({
     }
     if (profileId !== AUTO_PROFILE_ID) {
       ui$.lastSelectedProfileId.set(profileId)
+      settings$.selectedProfileId.set(profileId)
+
+      // Synchronize tabs page: find tabs belonging to this profile
+      const allTabs = tabs$.tabs.get()
+      const matchingTabs = allTabs.filter((t) => isTabInProfile(t, profileId))
+      const currentActiveTab = allTabs[tabs$.activeTabIndex.get()]
+
+      if (matchingTabs.length > 0) {
+        if (!currentActiveTab || !matchingTabs.some((t) => t.id === currentActiveTab.id)) {
+          tabs$.setActiveTabById(matchingTabs[0].id, 'user')
+        }
+      } else {
+        // No tabs in this profile yet:
+        // If current active tab is blank, assign it to this profile; otherwise open a new blank tab
+        if (currentActiveTab && (!currentActiveTab.url || currentActiveTab.url === '')) {
+          tabs$.setTabProfile(currentActiveTab.id, profileId)
+        } else {
+          tabs$.openTab('', { profile: profileId, profileMode: 'manual', source: 'manual' })
+        }
+      }
     }
   }
 
@@ -256,14 +316,33 @@ export const NavModalContent: React.FC<NavModalContentProps> = ({
             </Pressable>
           </View>
         </View>
+        {isEditing ? (
+          <View className="mt-4 mb-2 self-center flex-row items-center gap-2 rounded-full border border-red-200 bg-red-50/90 px-4 py-1.5 dark:border-red-900/60 dark:bg-red-950/40">
+            <MaterialIcons name="info-outline" size={14} color={isDark ? '#f87171' : '#dc2626'} />
+            <Text className="text-xs font-medium text-red-700 dark:text-red-300">
+              {t('newTab.presets.removeHint') || 'Tap any app to remove it from the new tab page'}
+            </Text>
+          </View>
+        ) : null}
         <View className="mt-6 lg:mt-10 flex-row flex-wrap justify-center gap-x-6 gap-y-7">
           {feedLinks.map((link) => (
             <TouchableHighlight
               key={link.id || 'feed'}
-              onPress={() => onPress(feedTabUrl(link.id))}
+              onPress={() => {
+                if (isEditing) {
+                  if (link.id === undefined) {
+                    watch$.feedPinned.set(false)
+                  } else {
+                    watch$.updateTimeline(link.id, { pinned: false })
+                  }
+                } else {
+                  onPress(feedTabUrl(link.id))
+                }
+              }}
+              onLongPress={() => setIsEditing(true)}
               underlayColor={isDark ? tw('#1f2937') : tw('#e0f2fe')}
             >
-              <View className={cls}>
+              <View className={clsx(cls, isEditing && 'border-dashed border-red-300 dark:border-red-900/80')}>
                 {/* As tall as the service icons, so the tiles in a row match. */}
                 <View className="h-[26px] w-6 items-center justify-center">
                   <Text style={{ fontSize: 20, lineHeight: 24 }}>{link.emoji}</Text>
@@ -271,7 +350,11 @@ export const NavModalContent: React.FC<NavModalContentProps> = ({
                 <Text className="flex-1 text-sm text-zinc-900 dark:text-zinc-100" numberOfLines={1}>
                   {link.name}
                 </Text>
-                {link.unread ? (
+                {isEditing ? (
+                  <View className="h-5 w-5 items-center justify-center rounded-full bg-red-100 dark:bg-red-950/70">
+                    <MaterialIcons name="close" size={13} color="#ef4444" />
+                  </View>
+                ) : link.unread ? (
                   <Text className="text-xs font-medium text-indigo-600 dark:text-indigo-300">{link.unread}</Text>
                 ) : null}
               </View>
@@ -282,14 +365,26 @@ export const NavModalContent: React.FC<NavModalContentProps> = ({
               !disabledServices.includes(value),
               <TouchableHighlight
                 key={value}
-                onPress={() => onPress(getHomeUrl(value))}
+                onPress={() => {
+                  if (isEditing) {
+                    settings$.toggleService(value)
+                  } else {
+                    onPress(getHomeUrl(value))
+                  }
+                }}
+                onLongPress={() => setIsEditing(true)}
                 underlayColor={isDark ? tw('#1f2937') : tw('#e0f2fe')}
               >
-                <View className={cls}>
+                <View className={clsx(cls, isEditing && 'border-dashed border-red-300 dark:border-red-900/80')}>
                   {icon()}
-                  <Text className="text-sm text-zinc-900 dark:text-zinc-100" numberOfLines={1}>
+                  <Text className="flex-1 text-sm text-zinc-900 dark:text-zinc-100" numberOfLines={1}>
                     {label}
                   </Text>
+                  {isEditing ? (
+                    <View className="h-5 w-5 items-center justify-center rounded-full bg-red-100 dark:bg-red-950/70">
+                      <MaterialIcons name="close" size={13} color="#ef4444" />
+                    </View>
+                  ) : null}
                 </View>
               </TouchableHighlight>,
             ),
@@ -297,26 +392,58 @@ export const NavModalContent: React.FC<NavModalContentProps> = ({
           {bookmarks.map((bookmark, index) => (
             <TouchableHighlight
               key={index}
-              onPress={() => onPress(bookmark.url)}
+              onPress={() => {
+                if (isEditing) {
+                  bookmarks$.deleteBookmark(index)
+                } else {
+                  onPress(bookmark.url)
+                }
+              }}
+              onLongPress={() => setIsEditing(true)}
               underlayColor={isDark ? tw('#1f2937') : tw('#e0f2fe')}
             >
-              <View className={cls}>
+              <View className={clsx(cls, isEditing && 'border-dashed border-red-300 dark:border-red-900/80')}>
                 <ServiceIcon url={bookmark.url} icon={bookmark.icon} />
-                <Text className="text-sm text-zinc-900 dark:text-zinc-100" numberOfLines={1}>
+                <Text className="flex-1 text-sm text-zinc-900 dark:text-zinc-100" numberOfLines={1}>
                   {bookmark.title}
                 </Text>
+                {isEditing ? (
+                  <View className="h-5 w-5 items-center justify-center rounded-full bg-red-100 dark:bg-red-950/70">
+                    <MaterialIcons name="close" size={13} color="#ef4444" />
+                  </View>
+                ) : null}
               </View>
             </TouchableHighlight>
           ))}
         </View>
-        <View className="mt-8 items-end px-4">
+        <View className="mt-8 flex-row items-center justify-end gap-3 px-4">
+          {isEditing ? (
+            <Pressable
+              onPress={() => setIsEditing(false)}
+              accessibilityRole="button"
+              accessibilityLabel={t('newTab.presets.done') || 'Done'}
+              className="flex-row items-center gap-1.5 h-10 px-4 rounded-full border border-indigo-500 bg-indigo-600 active:bg-indigo-700"
+            >
+              <MaterialIcons name="check" size={18} color="#ffffff" />
+              <Text className="text-sm font-medium text-white">{t('newTab.presets.done') || 'Done'}</Text>
+            </Pressable>
+          ) : (
+            <Pressable
+              onPress={() => setIsEditing(true)}
+              accessibilityRole="button"
+              accessibilityLabel={t('newTab.presets.edit') || 'Customize new tab'}
+              className="h-10 w-10 items-center justify-center rounded-full border border-zinc-200 bg-white/90 active:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-900/90 dark:active:bg-zinc-800"
+            >
+              <MaterialIcons name="edit" size={18} color={isDark ? tw(colors.icon) : tw(colors.iconLightStrong)} />
+            </Pressable>
+          )}
           <Pressable
             onPress={() => setPresetPickerOpen(true)}
             accessibilityRole="button"
             accessibilityLabel={t('newTab.presets.open')}
             className="h-10 w-10 items-center justify-center rounded-full border border-zinc-200 bg-white/90 active:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-900/90 dark:active:bg-zinc-800"
           >
-            <MaterialIcons name="edit" size={18} color={isDark ? tw(colors.icon) : tw(colors.iconLightStrong)} />
+            <MaterialIcons name="add" size={20} color={isDark ? tw(colors.icon) : tw(colors.iconLightStrong)} />
           </Pressable>
         </View>
       </ScrollView>
@@ -337,7 +464,7 @@ export const NavModalContent: React.FC<NavModalContentProps> = ({
               </Pressable>
             </View>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerClassName="gap-2">
-              {presetBookmarkGroups.map((group) => {
+              {allPresetBookmarkGroups.map((group) => {
                 const selected = group.id === selectedPresetGroupId
                 return (
                   <Pressable
@@ -363,41 +490,76 @@ export const NavModalContent: React.FC<NavModalContentProps> = ({
                 )
               })}
             </ScrollView>
-            <ScrollView className="mt-6 h-[300px]" contentContainerClassName="gap-3 pb-1">
-              {Array.from({ length: Math.ceil(visiblePresetBookmarks.length / 2) }, (_, rowIndex) => (
-                <View key={rowIndex} className="flex-row gap-3">
-                  {visiblePresetBookmarks.slice(rowIndex * 2, rowIndex * 2 + 2).map((preset) => {
-                    const added = bookmarkIndexByUrl.has(preset.url)
-                    return (
+            {selectedPresetGroupId === DEFAULT_APPS_GROUP_ID ? (
+              <ScrollView className="mt-6 h-[300px]" contentContainerClassName="gap-3 pb-1">
+                {Array.from({ length: Math.ceil(defaultAppEntries.length / 2) }, (_, rowIndex) => (
+                  <View key={rowIndex} className="flex-row gap-3">
+                    {defaultAppEntries.slice(rowIndex * 2, rowIndex * 2 + 2).map((app) => (
                       <Pressable
-                        key={preset.id}
-                        onPress={() => togglePresetBookmark(preset)}
+                        key={app.id}
+                        onPress={app.toggle}
                         className={clsx(
                           'min-w-0 flex-1 flex-row items-center gap-2 overflow-hidden rounded-full border border-zinc-200 bg-white/90 px-3 py-2 dark:border-zinc-800 dark:bg-zinc-900/90',
-                          added
+                          app.isEnabled
                             ? 'border-indigo-300 bg-indigo-50 dark:border-indigo-800 dark:bg-indigo-950/40'
-                            : 'active:bg-zinc-100 dark:active:bg-zinc-800',
+                            : 'active:bg-zinc-100 dark:active:bg-zinc-800 opacity-60',
                         )}
                       >
-                        <ServiceIcon url={preset.url} icon={preset.icon} />
+                        {app.icon()}
                         <Text className="flex-1 text-sm text-zinc-900 dark:text-zinc-100" numberOfLines={1}>
-                          {preset.title}
+                          {app.title}
                         </Text>
                         <MaterialIcons
-                          name={added ? 'check' : 'add'}
+                          name={app.isEnabled ? 'check' : 'add'}
                           size={16}
-                          color={added ? '#22c55e' : isDark ? tw(colors.icon) : tw(colors.iconLightStrong)}
+                          color={app.isEnabled ? '#22c55e' : isDark ? tw(colors.icon) : tw(colors.iconLightStrong)}
                         />
                       </Pressable>
-                    )
-                  })}
-                  {visiblePresetBookmarks.length % 2 === 1 &&
+                    ))}
+                    {defaultAppEntries.length % 2 === 1 &&
+                    rowIndex === Math.floor(defaultAppEntries.length / 2) ? (
+                      <View className="min-w-0 flex-1 flex-row items-center gap-2 overflow-hidden rounded-full border border-transparent px-3 py-2 opacity-0" />
+                    ) : null}
+                  </View>
+                ))}
+              </ScrollView>
+            ) : (
+              <ScrollView className="mt-6 h-[300px]" contentContainerClassName="gap-3 pb-1">
+                {Array.from({ length: Math.ceil(visiblePresetBookmarks.length / 2) }, (_, rowIndex) => (
+                  <View key={rowIndex} className="flex-row gap-3">
+                    {visiblePresetBookmarks.slice(rowIndex * 2, rowIndex * 2 + 2).map((preset) => {
+                      const added = bookmarkIndexByUrl.has(preset.url)
+                      return (
+                        <Pressable
+                          key={preset.id}
+                          onPress={() => togglePresetBookmark(preset)}
+                          className={clsx(
+                            'min-w-0 flex-1 flex-row items-center gap-2 overflow-hidden rounded-full border border-zinc-200 bg-white/90 px-3 py-2 dark:border-zinc-800 dark:bg-zinc-900/90',
+                            added
+                              ? 'border-indigo-300 bg-indigo-50 dark:border-indigo-800 dark:bg-indigo-950/40'
+                              : 'active:bg-zinc-100 dark:active:bg-zinc-800',
+                          )}
+                        >
+                          <ServiceIcon url={preset.url} icon={preset.icon} />
+                          <Text className="flex-1 text-sm text-zinc-900 dark:text-zinc-100" numberOfLines={1}>
+                            {preset.title}
+                          </Text>
+                          <MaterialIcons
+                            name={added ? 'check' : 'add'}
+                            size={16}
+                            color={added ? '#22c55e' : isDark ? tw(colors.icon) : tw(colors.iconLightStrong)}
+                          />
+                        </Pressable>
+                      )
+                    })}
+                    {visiblePresetBookmarks.length % 2 === 1 &&
                     rowIndex === Math.floor(visiblePresetBookmarks.length / 2) ? (
-                    <View className="min-w-0 flex-1 flex-row items-center gap-2 overflow-hidden rounded-full border border-transparent px-3 py-2 opacity-0" />
-                  ) : null}
-                </View>
-              ))}
-            </ScrollView>
+                      <View className="min-w-0 flex-1 flex-row items-center gap-2 overflow-hidden rounded-full border border-transparent px-3 py-2 opacity-0" />
+                    ) : null}
+                  </View>
+                ))}
+              </ScrollView>
+            )}
           </View>
         </BaseCenterModal>
       ) : null}

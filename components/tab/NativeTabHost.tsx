@@ -8,6 +8,8 @@ import { getGroupedTabIds, getTabGroupsKey } from '@/lib/tab-groups'
 import { tabGroups$, type TabGroupLayout } from '@/states/tab-groups'
 import { openDesktopTab, sortTabsByOrder, tabs$ } from '@/states/tabs'
 import { NoraTab } from './NoraTab'
+import { isTabInProfile } from '@/lib/profile'
+import { isFeedTabUrl } from '@/lib/feed-tab'
 import { NativeEmptySlot } from './desktop/NativeEmptySlot'
 import { desktopWorkspaceState$ } from './desktop/desktopWorkspaceState'
 import {
@@ -32,7 +34,15 @@ const FILL = { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 } as c
  */
 export const NativeTabHost: React.FC<{ desktopLayout: boolean }> = ({ desktopLayout }) => {
   const tw = useTwColor()
-  const tabs = useValue(tabs$.tabs)
+  const allTabs = useValue(tabs$.tabs)
+  const selectedProfileId = useValue(settings$.selectedProfileId) || 'default'
+  const tabs = useMemo(
+    () =>
+      !desktopLayout || selectedProfileId === 'all'
+        ? allTabs
+        : allTabs.filter((tab) => isTabInProfile(tab, selectedProfileId)),
+    [allTabs, desktopLayout, selectedProfileId],
+  )
   const activeTabIndex = useValue(tabs$.activeTabIndex)
   const orders = useValue(tabs$.orders)
   const activeGroupId = useValue(tabGroups$.activeGroupId)
@@ -52,12 +62,16 @@ export const NativeTabHost: React.FC<{ desktopLayout: boolean }> = ({ desktopLay
   const orderedTabs = useMemo(() => sortTabsByOrder(tabs, orders), [tabIdsKey, orders])
   const tabIdSet = useMemo(() => new Set(tabs.map((tab) => tab.id)), [tabIdsKey])
   const ungroupedTabIds = orderedTabs.filter((tab) => !groupedTabIds.has(tab.id)).map((tab) => tab.id)
-  const activeTabId = tabs[activeTabIndex]?.id
+  const activeTab = allTabs[activeTabIndex]
+  const activeTabId = activeTab && tabIdSet.has(activeTab.id) ? activeTab.id : undefined
   const isSingle = !activeGroup
   const singleVisibleTabId = isSingle
-    ? activeTabId && ungroupedTabIds.includes(activeTabId)
+    ? activeTabId && tabIdSet.has(activeTabId)
       ? activeTabId
-      : ungroupedTabIds[0]
+      : (ungroupedTabIds.find((tabId) => {
+          const tab = tabs.find((t) => t.id === tabId)
+          return tab && !isFeedTabUrl(tab.url)
+        }) || ungroupedTabIds[0])
     : undefined
   const visibleSlots = activeGroup ? activeGroup.tabIds : singleVisibleTabId ? [singleVisibleTabId] : []
   const visibleTabIds = visibleSlots.filter((tabId): tabId is string => typeof tabId === 'string' && tabIdSet.has(tabId))
@@ -107,11 +121,14 @@ export const NativeTabHost: React.FC<{ desktopLayout: boolean }> = ({ desktopLay
     if (activeTabId && visibleTabIds.includes(activeTabId)) {
       return
     }
+    if (isSingle && activeTabId && tabIdSet.has(activeTabId)) {
+      return
+    }
     const fallbackTabId = visibleTabIds.find((tabId) => tabIdSet.has(tabId))
     if (fallbackTabId) {
       tabs$.setActiveTabById(fallbackTabId, 'system')
     }
-  }, [activeGroupId, activeTabId, desktopLayout, tabIdsKey, visibleTabIds.join('|')])
+  }, [activeGroupId, activeTabId, desktopLayout, isSingle, tabIdsKey, visibleTabIds.join('|')])
 
   const onLayout = (event: LayoutChangeEvent) => {
     const { width, height } = event.nativeEvent.layout

@@ -17,7 +17,7 @@ export const NouLink: React.FC<Props> = ({ href, ...rest }) => {
           if (href.includes('/auth/')) {
             // For auth links, using openAuthSessionAsync is more robust on iOS
             // as it handles deep link redirects and automatic dismissal better.
-            const result = await openAuthSessionAsync(href, 'nora:auth')
+            const result = await openAuthSessionAsync(href, 'nora://auth')
             if (result.type === 'success' && result.url) {
               await onReceiveAuthUrl(result.url)
             }

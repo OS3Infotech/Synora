@@ -235,6 +235,13 @@ export function blockAds() {
   if (!['www.instagram.com', 'www.reddit.com', 'x.com'].includes(host)) {
     return
   }
+  // Avoid patching XMLHttpRequest on login and authentication flows (Arkose Labs / Cloudflare bot verification on x.com)
+  if (
+    host === 'x.com' &&
+    (location.pathname.startsWith('/i/flow') || location.pathname.startsWith('/login') || location.pathname.startsWith('/account'))
+  ) {
+    return
+  }
   function interceptResponse(url: string, response: string) {
     if (!adBlockingEnabled()) {
       return response
@@ -290,6 +297,10 @@ export function blockAds() {
       return super.response
     }
   }
+  try {
+    Object.defineProperty(XMLHttpRequest, 'name', { value: 'XMLHttpRequest' })
+    Object.defineProperty(XMLHttpRequest, 'toString', { value: () => 'function XMLHttpRequest() { [native code] }' })
+  } catch {}
   window.XMLHttpRequest = XMLHttpRequest
 }
 

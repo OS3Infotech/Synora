@@ -11,7 +11,7 @@ import { initMainChannel } from './ipc/main'
 import { uiClient } from './ipc/ui'
 import { getUserAgent } from '@/lib/useragent'
 import { isHttpUrl, normalizeExternalTargetUrl, shouldOpenInSystemBrowser } from './lib/link-handling'
-import { FIREFOX_UA, isGoogleAuthUrl, setupGoogleAuthSession } from './lib/google-auth-popup'
+import { isOAuthPopupUrl } from './lib/google-auth-popup'
 import { attachWebRtcProtection } from './lib/webrtc'
 import { readImage } from './lib/image-preview'
 import { randomUUID } from 'node:crypto'
@@ -29,7 +29,6 @@ if (
 ) {
   app.disableHardwareAcceleration()
   app.commandLine.appendSwitch('disable-gpu')
-  app.commandLine.appendSwitch('disable-software-rasterizer')
 }
 
 function attachContextMenu(webContents: Electron.WebContents, ownerWindow: BrowserWindow): void {
@@ -164,9 +163,17 @@ function createWindow(): void {
   })
   setMainWindow(mainWindow)
 
-  mainWindow.on('ready-to-show', () => {
+  mainWindow.once('ready-to-show', () => {
     mainWindow.show()
   })
+
+  // Fallback: If ready-to-show is delayed or doesn't fire under software rendering / virtual display,
+  // ensure the window is shown so the UI is visible.
+  setTimeout(() => {
+    if (!mainWindow.isDestroyed() && !mainWindow.isVisible()) {
+      mainWindow.show()
+    }
+  }, 1000)
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url)
@@ -232,9 +239,7 @@ function createWindow(): void {
     // would then be denied.
     wc.session.setPermissionCheckHandler((_wc, permission) => allowedPermissions.has(permission))
     attachContextMenu(wc, mainWindow)
-    setupGoogleAuthSession(wc.session)
     wc.on('did-create-window', (childWindow) => {
-      childWindow.webContents.setUserAgent(FIREFOX_UA)
       childWindow.webContents.on('will-navigate', (_event, targetUrl) => {
         if (targetUrl.startsWith('nora:')) {
           childWindow.close()
@@ -253,10 +258,10 @@ function createWindow(): void {
       if (isWatchPage(wc.id)) return { action: 'deny' }
       const url = normalizeExternalTargetUrl(details.url)
 
-      // Google OAuth: open as a child popup BrowserWindow with window.opener preserved
-      // and Firefox User-Agent so Google allows the login without the
-      // "This browser or app may not be secure" block.
-      if (isGoogleAuthUrl(url)) {
+      // Google OAuth and social sign-in popups (LinkedIn, X/Twitter, etc.):
+      // Open as a child popup BrowserWindow with window.opener preserved so the
+      // OAuth flow can communicate with the opening page and close when complete.
+      if (isOAuthPopupUrl(url, details.referrer.url || wc.getURL())) {
         return {
           action: 'allow',
           overrideBrowserWindowOptions: {
@@ -311,7 +316,6 @@ app.whenReady().then(() => {
   setupWatch()
 
   attachDownloadHandler(session.defaultSession)
-  setupGoogleAuthSession(session.defaultSession)
 
   // Default open or close DevTools by F12 in development
   // and ignore CommandOrControl + R in production.

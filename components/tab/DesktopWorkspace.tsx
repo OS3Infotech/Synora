@@ -10,13 +10,26 @@ import { openTabInDesktopGroup, openUrlInDesktopTab } from '@/lib/desktop-view-a
 import { getGroupedTabIds, getTabGroupsKey } from '@/lib/tab-groups'
 import { tabGroups$, type TabGroupLayout } from '@/states/tab-groups'
 import { getOrderedTabIds, openDesktopTab, sortTabsByOrder, tabs$ } from '@/states/tabs'
+import { settings$ } from '@/states/settings'
+import { isTabInProfile } from '@/lib/profile'
+import { isFeedTabUrl } from '@/lib/feed-tab'
 import { GroupEmptySlot } from './desktop/GroupEmptySlot'
 import { SortableDesktopTab } from './desktop/SortableDesktopTab'
 import { desktopWorkspaceState$ } from './desktop/desktopWorkspaceState'
 
 export const DesktopWorkspace: React.FC = () => {
-  const tabs = useValue(tabs$.tabs)
+  const allTabs = useValue(tabs$.tabs)
+  const selectedProfileId = useValue(settings$.selectedProfileId) || 'default'
   const activeTabIndex = useValue(tabs$.activeTabIndex)
+  const activeTab = allTabs[activeTabIndex]
+  const tabs = useMemo(() => {
+    if (selectedProfileId === 'all') return allTabs
+    const filtered = allTabs.filter((tab) => isTabInProfile(tab, selectedProfileId))
+    if (activeTab && !filtered.some((tab) => tab.id === activeTab.id)) {
+      return [...filtered, activeTab]
+    }
+    return filtered
+  }, [allTabs, selectedProfileId, activeTab])
   const orders = useValue(tabs$.orders)
   const activeGroupId = useValue(tabGroups$.activeGroupId)
   const groups = useValue(tabGroups$.groups)
@@ -32,12 +45,15 @@ export const DesktopWorkspace: React.FC = () => {
   const orderedTabIds = useMemo(() => getOrderedTabIds(tabs, orders), [tabIdsKey, orders])
   const tabIdSet = useMemo(() => new Set(tabs.map((tab) => tab.id)), [tabIdsKey])
   const ungroupedTabIds = orderedTabs.filter((tab) => !groupedTabIds.has(tab.id)).map((tab) => tab.id)
-  const activeTabId = tabs[activeTabIndex]?.id
+  const activeTabId = activeTab?.id
   const isSingle = !activeGroup
   const singleVisibleTabId = isSingle
-    ? activeTabId && ungroupedTabIds.includes(activeTabId)
+    ? activeTabId && tabIdSet.has(activeTabId)
       ? activeTabId
-      : ungroupedTabIds[0]
+      : (ungroupedTabIds.find((tabId) => {
+          const tab = tabs.find((t) => t.id === tabId)
+          return tab && !isFeedTabUrl(tab.url)
+        }) || ungroupedTabIds[0])
     : undefined
   const visibleSlots = activeGroup ? activeGroup.tabIds : singleVisibleTabId ? [singleVisibleTabId] : []
   const visibleTabIds = visibleSlots.filter((tabId): tabId is string => typeof tabId === 'string' && tabIdSet.has(tabId))
@@ -45,6 +61,12 @@ export const DesktopWorkspace: React.FC = () => {
   const viewLayout: TabGroupLayout = activeGroup?.layout || 'deck'
   const isDeck = viewLayout === 'deck' && !isSingle
   const isSplit = viewLayout === 'split-view' && !isSingle
+
+  useEffect(() => {
+    if (activeGroup && !activeGroup.tabIds.some((tabId) => tabId && tabIdSet.has(tabId))) {
+      tabGroups$.setActiveGroup(null)
+    }
+  }, [activeGroupId, tabIdsKey])
 
   useEffect(() => {
     if (isDeck && tabs.length > prevTabCountRef.current && deckScrollRef.current) {
@@ -62,11 +84,14 @@ export const DesktopWorkspace: React.FC = () => {
     if (activeTabId && visibleTabIds.includes(activeTabId)) {
       return
     }
+    if (isSingle && activeTabId && tabIdSet.has(activeTabId)) {
+      return
+    }
     const fallbackTabId = visibleTabIds.find((tabId) => tabIdSet.has(tabId))
     if (fallbackTabId) {
       tabs$.setActiveTabById(fallbackTabId, 'system')
     }
-  }, [activeGroupId, activeTabId, tabIdsKey, visibleTabIds.join('|')])
+  }, [activeGroupId, activeTabId, isSingle, tabIdsKey, visibleTabIds.join('|')])
 
   const sensors = useSensors(
     useSensor(PointerSensor, {

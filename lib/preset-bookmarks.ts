@@ -78,6 +78,7 @@ export const presetBookmarks: PresetBookmark[] = [
   },
   { id: 'preset-news-cnn', groupId: 'preset-news', title: 'CNN', url: 'https://www.cnn.com' },
   { id: 'preset-news-aljazeera', groupId: 'preset-news', title: 'Al Jazeera', url: 'https://www.aljazeera.com' },
+  { id: 'preset-search-brave', groupId: 'preset-news', title: 'Brave Search', url: 'https://search.brave.com' },
 ].map((bookmark) => ({
   ...bookmark,
   icon: bookmark.icon || getDuckDuckGoIcon(bookmark.url),

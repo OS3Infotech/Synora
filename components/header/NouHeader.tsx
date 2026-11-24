@@ -1,4 +1,4 @@
-import { ActivityIndicator, Dimensions, View, Text, TouchableOpacity, LayoutChangeEvent, useColorScheme } from 'react-native'
+import { ActivityIndicator, Dimensions, View, Text, TouchableOpacity, Pressable, LayoutChangeEvent, useColorScheme, Appearance } from 'react-native'
 import MaterialIcons from '@react-native-vector-icons/material-icons'
 import MaterialCommunityIcons from '@react-native-vector-icons/material-design-icons'
 import React, { useCallback, useEffect, useRef } from 'react'
@@ -25,7 +25,7 @@ import { bookmarks$ } from '@/states/bookmarks'
 import { showToast } from '@/lib/toast'
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler'
 import { executeWebviewJavaScriptQuietly, getTabWebview, reloadWebview, scrollWebviewToTop } from '@/lib/webview'
-import { openTabForActiveDesktopView } from '@/lib/desktop-view-actions'
+import { openTabForActiveDesktopView, openTabInDesktopGroup } from '@/lib/desktop-view-actions'
 import { DesktopTabsSidebar } from '../view/DesktopTabsSidebar'
 import { ServiceIcon } from '../service/Services'
 import { Tooltip } from '../tooltip/Tooltip'
@@ -44,6 +44,7 @@ import { toggleWatched } from '@/lib/watch-feed'
 import { openFindInPage } from '@/lib/find-in-page'
 import { desktopSiteUrl } from '@/lib/desktop-site'
 import { visibleHeaderMenuActions, type HeaderMenuActionId } from '@/lib/settings/header-menu'
+import { ProfileSwitcher } from '../profile/ProfileSwitcher'
 
 type HeaderMenuItem = Item & { id: HeaderMenuActionId }
 
@@ -305,33 +306,325 @@ export const NouHeader: React.FC<{}> = ({}) => {
       ]
     : []
 
+  const moreMenu = (() => {
+    const pageActions = visibleHeaderMenuActions<HeaderMenuItem>(
+      [
+        ...(isWeb
+          ? []
+          : [
+              {
+                id: 'reload' as const,
+                label: t('menus.reload'),
+                icon: <MaterialIcons name="refresh" size={18} color={headerControlColor} />,
+                systemImage: 'arrow.clockwise',
+                handler: reloadPage,
+              },
+              {
+                id: 'scrollToTop' as const,
+                label: t('menus.scroll'),
+                icon: <MaterialIcons name="vertical-align-top" size={18} color={headerControlColor} />,
+                systemImage: 'arrow.up.to.line',
+                handler: scrollToTop,
+              },
+              {
+                id: 'openUrl' as const,
+                label: t('buttons.openUrl'),
+                icon: <MaterialIcons name="language" size={18} color={headerControlColor} />,
+                systemImage: 'globe',
+                handler: editTabUrl,
+              },
+              ...(isFeedTab || !currentTab?.url
+                ? []
+                : [
+                    {
+                      id: 'findInPage' as const,
+                      label: t('menus.findInPage'),
+                      icon: <MaterialIcons name="find-in-page" size={18} color={headerControlColor} />,
+                      systemImage: 'text.magnifyingglass',
+                      handler: () => openFindInPage(tabs$.currentTab()?.id),
+                    },
+                  ]),
+              ...(hideDesktopSiteToggle
+                ? []
+                : [
+                    {
+                      id: 'desktopSite' as const,
+                      label: t('menus.desktop'),
+                      icon: <MaterialIcons name="desktop-windows" size={18} color={headerControlColor} />,
+                      systemImage: 'desktopcomputer',
+                      checked: !!currentTab?.desktopMode,
+                      metaLabel: currentTab?.desktopMode ? t('common.on') : t('common.off'),
+                      meta: (
+                        <View
+                          className={clsx(
+                            'rounded-full px-2 py-1',
+                            currentTab?.desktopMode
+                              ? 'bg-indigo-100 border border-indigo-300 dark:bg-indigo-500/20 dark:border-indigo-400/40'
+                              : 'bg-zinc-200 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700',
+                          )}
+                        >
+                          <Text
+                            className={clsx(
+                              'text-[11px] font-medium',
+                              currentTab?.desktopMode ? 'text-indigo-700 dark:text-indigo-200' : 'text-zinc-600 dark:text-zinc-400',
+                            )}
+                          >
+                            {currentTab?.desktopMode ? t('common.on') : t('common.off')}
+                          </Text>
+                        </View>
+                      ),
+                      handler: () => {
+                        const desktopMode = !currentTab?.desktopMode
+                        tabs$.tabs[activeTabIndex].desktopMode.toggle()
+                        setTimeout(() => {
+                          const target = activeWebview()
+                          if (currentTab?.url) {
+                            const desktopUrl = desktopMode ? desktopSiteUrl(currentTab.url) : currentTab.url
+                            if (desktopUrl !== currentTab.url) {
+                              target?.loadUrl?.(desktopUrl)
+                              return
+                            }
+                            const url = new URL(currentTab.url)
+                            if (url.hostname === 'm.facebook.com' && desktopMode) {
+                              url.hostname = 'www.facebook.com'
+                              target?.loadUrl?.(url.toString())
+                              return
+                            }
+                            if (url.hostname === 'www.facebook.com' && !desktopMode) {
+                              url.hostname = 'm.facebook.com'
+                              target?.loadUrl?.(url.toString())
+                              return
+                            }
+                          }
+                          reloadWebview(target, currentTab?.url)
+                        }, 0)
+                      },
+                    },
+                  ]),
+              ...(!desktopLayout ? blocklistMenuItems : []),
+              ...(!desktopLayout ? anonymousMenuItems : []),
+              // Desktop has this in the tab context menu.
+              ...(desktopLayout || isFeedTab || !currentTab?.url
+                ? []
+                : [
+                    {
+                      id: 'reopenInProfile' as const,
+                      label: t('menus.reopenInProfile'),
+                      icon: <MaterialIcons name="switch-account" size={18} color={headerControlColor} />,
+                      systemImage: 'person.crop.circle',
+                      handler: () => ui$.profileTabId.set(currentTab.id),
+                    },
+                  ]),
+              ...watchMenuItems,
+              ...(isFeedTab
+                ? []
+                : [
+                    {
+                      id: 'zoom' as const,
+                      label: t('menus.zoom') || 'Zoom',
+                      icon: <MaterialIcons name="zoom-in" size={18} color={headerControlColor} />,
+                      systemImage: 'plus.magnifyingglass',
+                      metaLabel: `${resolveZoom(host, siteZoom, defaultZoom)}%`,
+                      handler: () => ui$.zoomModalOpen.set(true),
+                    },
+                  ]),
+              {
+                id: 'addBookmark' as const,
+                label: t('menus.addBookmark'),
+                icon: <MaterialIcons name="bookmark-add" size={18} color={headerControlColor} />,
+                systemImage: 'bookmark',
+                handler: addBookmark,
+              },
+              ...(isFeedTab
+                ? []
+                : [
+                    {
+                      id: 'share' as const,
+                      label: t('menus.share'),
+                      icon: <MaterialIcons name="share" size={18} color={headerControlColor} />,
+                      systemImage: 'square.and.arrow.up',
+                      handler: () => (currentTab ? share(currentTab.url) : {}),
+                    },
+                  ]),
+              ...(currentTab && canPinTabToHomeScreen(currentTab)
+                ? [
+                    {
+                      id: 'addToHomeScreen' as const,
+                      label: t('menus.addToHomeScreen'),
+                      icon: <MaterialIcons name="add-to-home-screen" size={18} color={headerControlColor} />,
+                      handler: () => {
+                        void pinTabToHomeScreen(currentTab)
+                      },
+                    },
+                  ]
+                : []),
+            ]),
+      ],
+      hiddenHeaderMenuActions,
+    )
+    const appActions = visibleHeaderMenuActions<HeaderMenuItem>(
+      [
+        ...(!feedEnabled
+          ? []
+          : [
+              {
+                id: 'feed' as const,
+                label: t('feed.label'),
+                icon: <MaterialIcons name="rss-feed" size={18} color={headerControlColor} />,
+                systemImage: 'list.bullet.rectangle',
+                metaLabel: feedUnreadCount ? String(feedUnreadCount) : undefined,
+                handler: () => openFeedTab(),
+              },
+            ]),
+        {
+          id: 'tools',
+          label: t('menus.tools'),
+          icon: <MaterialIcons name="build" size={18} color={headerControlColor} />,
+          systemImage: 'wrench.and.screwdriver',
+          handler: () => ui$.toolsModalOpen.set(true),
+        },
+      ],
+      hiddenHeaderMenuActions,
+    )
+    return (
+      <Tooltip title={t('menus.more')}>
+        <NouMenu
+          triggerColor={headerControlColor}
+          triggerSize={44}
+          trigger={
+            isIos
+              ? 'ellipsis'
+              : <MaterialButton name="more-vert" accessibilityLabel={t('menus.more')} size={headerIconSize} color={headerControlColor} style={headerButtonStyle} />
+          }
+          items={[
+            ...pageActions,
+            ...(pageActions.length ? [{ label: '', handler: () => {}, kind: 'separator' as const }] : []),
+            ...appActions,
+            {
+              label: t('settings.label'),
+              icon: <MaterialIcons name="settings" size={18} color={headerControlColor} />,
+              systemImage: 'gearshape',
+              handler: () => ui$.settingsModalOpen.set(true),
+            },
+          ]}
+        />
+      </Tooltip>
+    )
+  })()
+
+  const trailingControls = (
+    <>
+      {nIf(
+        pinnedScripts.length === 1,
+        (() => {
+          const script = pinnedScripts[0]
+          return (
+            <Tooltip title={script?.name}>
+              <MaterialCommunityButton name="puzzle-outline" color={headerControlColor} onPress={() => runPinnedScript(script)} style={headerButtonStyle} />
+            </Tooltip>
+          )
+        })(),
+      )}
+      {nIf(
+        pinnedScripts.length > 1,
+        <Tooltip title={t('settings.userStyles.scripts.pinnedScripts')}>
+          <NouMenu
+            triggerColor={headerControlColor}
+            triggerSize={44}
+            trigger={
+              <View className="px-[14px] py-[10px]">
+                <MaterialCommunityIcons name="puzzle-outline" size={24} color={headerControlColor} />
+              </View>
+            }
+            items={pinnedScripts.map((script) => ({
+              label: script.name,
+              icon: <MaterialIcons name="code" size={18} color={headerControlColor} />,
+              systemImage: 'chevron.left.forwardslash.chevron.right',
+              handler: () => runPinnedScript(script),
+            }))}
+          />
+        </Tooltip>,
+      )}
+      {nIf(
+        !isIos && canDownload,
+        (() => {
+          const downloadButton = <MaterialButton name="download" color={headerControlColor} onPress={() => ui$.downloadVideoModalUrl.set(currentTab?.url || '')} style={headerButtonStyle} />
+          return <Tooltip title={t('modals.downloadVideo')}>{downloadButton}</Tooltip>
+        })(),
+      )}
+      {nIf(
+        !desktopLayout && currentTab?.isLoading,
+        <ActivityIndicator size="small" color={headerControlColor} style={{ marginRight: 4 }} />,
+      )}
+      {nIf(
+        !desktopLayout,
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel={t('tabs.open', { count: tabsCount })} className="flex-row items-center p-3" onPress={() => ui$.tabModalOpen.set(true)}>
+          {/* The size of the icons beside it, with a line as heavy as theirs. */}
+          <View
+            className="h-[22px] min-w-[22px] items-center justify-center rounded-[6px] px-1"
+            style={{ borderColor: headerControlColor, borderWidth: isDark ? 1.5 : 1.75 }}
+          >
+            <NouText className="text-xs font-semibold" style={{ color: headerControlColor }}>{tabsCount}</NouText>
+          </View>
+        </TouchableOpacity>,
+      )}
+      {nIf(
+        desktopLayout && recentlyClosedTabs.length > 0,
+        <Tooltip title={t('buttons.restoreTabs')}>
+          <NouMenu
+            trigger={<MaterialButton name="restore" color={headerControlColor} />}
+            items={[
+              ...recentlyClosedTabs.map((tab) => ({
+                label: tab.title || tab.url || t('tabs.new'),
+                description: tab.title && tab.url && tab.title !== tab.url ? tab.url : undefined,
+                icon: <ServiceIcon url={tab.url} icon={tab.icon} />,
+                trailing: (
+                  <TouchableOpacity
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('tabs.removeFromHistory')}
+                    onPress={(e) => {
+                      e?.stopPropagation?.()
+                      tabs$.removeClosedTab(tab.id)
+                    }}
+                  >
+                    <MaterialIcons name="close" size={16} color={tw(colors.iconSubtle)} />
+                  </TouchableOpacity>
+                ),
+                handler: () => tabs$.reopenClosedTab(tab.id),
+              })),
+              { label: '', handler: () => {}, kind: 'separator' as const },
+              {
+                label: t('tabs.clearRecentlyClosed'),
+                icon: <MaterialIcons name="delete-outline" size={18} color={tw(colors.iconSubtle)} />,
+                handler: () => tabs$.clearRecentlyClosedTabs(),
+              },
+            ]}
+          />
+        </Tooltip>,
+      )}
+      {moreMenu}
+    </>
+  )
+
   const ret = (
     <HeaderRoot
       pointerEvents={desktopLayout ? 'auto' : (headerShown ? 'auto' : 'none')}
       className={clsx(
         'bg-zinc-100 dark:bg-zinc-800',
-        // On web the sidebar classes sit behind the `lg:` media query and win there, so the
-        // row defaults stay. On native both sets are plain classes and would fight over
-        // flex-direction and padding, so the sidebar replaces them outright.
-        !nativeDesktop && 'flex-row items-center justify-between py-1',
-        !nativeDesktop && (desktopLayout ? 'px-2' : 'px-3'),
+        !desktopLayout && 'flex-row items-center justify-between py-1 px-3',
         desktopLayout && (sidebarCollapsed
-          ? rc(
-              'lg:w-[56px] lg:flex-col lg:items-stretch lg:justify-start lg:gap-0 lg:bg-zinc-100 lg:px-0 lg:py-0 lg:border-r lg:border-zinc-200 dark:lg:bg-zinc-900 dark:lg:border-zinc-800',
-              'w-[56px] flex-col items-stretch justify-start gap-0 bg-zinc-100 px-0 py-0 border-r border-zinc-200 dark:bg-zinc-900 dark:border-zinc-800',
-            )
-          : rc(
-              'lg:w-[280px] lg:flex-col lg:items-stretch lg:justify-start lg:gap-0 lg:bg-zinc-100 lg:px-0 lg:py-0 lg:border-r lg:border-zinc-200 dark:lg:bg-zinc-900 dark:lg:border-zinc-800',
-              'w-[280px] flex-col items-stretch justify-start gap-0 bg-zinc-100 px-0 py-0 border-r border-zinc-200 dark:bg-zinc-900 dark:border-zinc-800',
-            )),
+          ? 'w-[56px] h-full flex-col items-stretch justify-start gap-0 bg-zinc-100 px-0 py-0 border-r border-zinc-200 dark:bg-[#0c0d12] dark:border-zinc-800/80'
+          : 'w-[260px] h-full flex-col items-stretch justify-start gap-0 bg-zinc-100 px-0 py-0 border-r border-zinc-200 dark:bg-[#0c0d12] dark:border-zinc-800/80'
+        ),
       )}
-      style={isWeb ? animatedHeaderStyle : undefined}
+      style={isWeb && !desktopLayout ? animatedHeaderStyle : undefined}
       onLayout={onLayout}
     >
       {nIf(
         !desktopLayout,
         <View className={clsx('flex-row items-center', isAndroid ? 'gap-0' : 'gap-3')}>
-          {nIf(showNewTabButtonInHeader, <MaterialButton name="add" size={headerIconSize} color={headerControlColor} accessibilityRole="button" accessibilityLabel={t('tabs.new')} onPress={() => tabs$.openTab('')} style={isWeb ? headerButtonStyle : { ...headerButtonStyle, height: 52 }} />)}
+          {nIf(showNewTabButtonInHeader, <MaterialButton name="add" size={headerIconSize} color={headerControlColor} accessibilityRole="button" accessibilityLabel={t('tabs.new')} onPress={() => openTabInDesktopGroup(null, '')} style={isWeb ? headerButtonStyle : { ...headerButtonStyle, height: 52 }} />)}
           {nIf(showBackButtonInHeader, <MaterialButton name="arrow-back" accessibilityLabel={t('menus.back')} size={22} color={headerControlColor} onPress={handleBack} style={headerButtonStyle} />)}
           {nIf(showForwardButtonInHeader, <MaterialButton name="arrow-forward" accessibilityLabel={t('menus.forward')} size={22} color={headerControlColor} onPress={goForward} style={headerButtonStyle} />)}
           {nIf(showReloadButtonInHeader, <MaterialButton name="refresh" accessibilityLabel={t('menus.reload')} size={22} color={headerControlColor} onPress={reloadPage} style={headerButtonStyle} />)}
@@ -340,337 +633,183 @@ export const NouHeader: React.FC<{}> = ({}) => {
       )}
       {nIf(
         desktopLayout && !sidebarCollapsed,
-        <View className={rc('min-w-0 lg:w-full lg:flex-1 lg:min-h-0', 'min-w-0 w-full flex-1 min-h-0')}>
+        <View className="min-w-0 w-full flex-1 min-h-0">
           <DesktopTabsSidebar />
         </View>,
       )}
       {nIf(
-        sidebarCollapsed,
-        <View className={rc('min-w-0 lg:w-full lg:flex-1 lg:min-h-0', 'min-w-0 w-full flex-1 min-h-0')}>
+        desktopLayout && sidebarCollapsed,
+        <View className="min-w-0 w-full flex-1 min-h-0">
           <DesktopTabsSidebar collapsed />
         </View>,
       )}
       <View
         className={clsx(
-          !nativeDesktop && 'flex-row items-center justify-end gap-1',
+          !desktopLayout && 'flex-row items-center justify-end gap-1',
           desktopLayout &&
             !sidebarCollapsed &&
-            rc(
-              'lg:w-full lg:flex-row lg:items-center lg:justify-center lg:border-t lg:border-zinc-200 lg:bg-zinc-100 lg:p-2 dark:lg:border-zinc-800 dark:lg:bg-zinc-900',
-              'w-full flex-row items-center justify-center gap-1 border-t border-zinc-200 bg-zinc-100 p-2 dark:border-zinc-800 dark:bg-zinc-900',
-            ),
+            'w-full flex-row items-center justify-between border-t border-zinc-200 bg-zinc-100 px-2.5 py-2 dark:border-zinc-800/80 dark:bg-[#0c0d12]',
           desktopLayout &&
             sidebarCollapsed &&
-            rc(
-              'lg:w-full lg:flex-col lg:items-center lg:justify-center lg:gap-1 lg:border-t lg:border-zinc-200 lg:bg-zinc-100 lg:p-2 dark:lg:border-zinc-800 dark:lg:bg-zinc-900',
-              'w-full flex-col items-center justify-center gap-1 border-t border-zinc-200 bg-zinc-100 p-2 dark:border-zinc-800 dark:bg-zinc-900',
-            ),
+            'w-full flex-col items-center justify-center gap-1.5 border-t border-zinc-200 bg-zinc-100 p-2 dark:border-zinc-800/80 dark:bg-[#0c0d12]',
         )}
       >
+        {nIf(desktopLayout, <ProfileSwitcher mode="profile" collapsed={sidebarCollapsed} />)}
         {nIf(
-          desktopLayout,
-          <Tooltip title={t('buttons.toggleSidebar')}>
-            <MaterialButton
-              name={sidebarCollapsed ? 'chevron-right' : 'chevron-left'}
-              color={headerControlColor}
-              onPress={toggleSidebar}
-            />
-          </Tooltip>,
-        )}
-        {nIf(
-          pinnedScripts.length === 1,
-          (() => {
-            const script = pinnedScripts[0]
-            return (
-              <Tooltip title={script?.name}>
-                <MaterialCommunityButton name="puzzle-outline" color={headerControlColor} onPress={() => runPinnedScript(script)} style={headerButtonStyle} />
-              </Tooltip>
-            )
-          })(),
-        )}
-        {nIf(
-          pinnedScripts.length > 1,
-          <Tooltip title={t('settings.userStyles.scripts.pinnedScripts')}>
-            <NouMenu
-              triggerColor={headerControlColor}
-              triggerSize={44}
-              trigger={
-                <View className="px-[14px] py-[10px]">
-                  <MaterialCommunityIcons name="puzzle-outline" size={24} color={headerControlColor} />
-                </View>
-              }
-              items={pinnedScripts.map((script) => ({
-                label: script.name,
-                icon: <MaterialIcons name="code" size={18} color={headerControlColor} />,
-                systemImage: 'chevron.left.forwardslash.chevron.right',
-                handler: () => runPinnedScript(script),
-              }))}
-            />
-          </Tooltip>,
-        )}
-        {nIf(
-          !isIos && canDownload,
-          (() => {
-            const downloadButton = <MaterialButton name="download" color={headerControlColor} onPress={() => ui$.downloadVideoModalUrl.set(currentTab?.url || '')} style={headerButtonStyle} />
-            return <Tooltip title={t('modals.downloadVideo')}>{downloadButton}</Tooltip>
-          })(),
-        )}
-        {nIf(
-          !desktopLayout && currentTab?.isLoading,
-          <ActivityIndicator size="small" color={headerControlColor} style={{ marginRight: 4 }} />,
-        )}
-        {nIf(
-          !desktopLayout,
-          <TouchableOpacity accessibilityRole="button" accessibilityLabel={t('tabs.open', { count: tabsCount })} className="flex-row items-center p-3" onPress={() => ui$.tabModalOpen.set(true)}>
-            {/* The size of the icons beside it, with a line as heavy as theirs. */}
-            <View
-              className="h-[22px] min-w-[22px] items-center justify-center rounded-[6px] px-1"
-              style={{ borderColor: headerControlColor, borderWidth: isDark ? 1.5 : 1.75 }}
-            >
-              <NouText className="text-xs font-semibold" style={{ color: headerControlColor }}>{tabsCount}</NouText>
-            </View>
-          </TouchableOpacity>,
-        )}
-        {nIf(
-          desktopLayout && recentlyClosedTabs.length > 0,
-          <Tooltip title={t('buttons.restoreTabs')}>
-            <NouMenu
-              trigger={<MaterialButton name="restore" color={headerControlColor} />}
-              items={[
-                ...recentlyClosedTabs.map((tab) => ({
-                  label: tab.title || tab.url || t('tabs.new'),
-                  description: tab.title && tab.url && tab.title !== tab.url ? tab.url : undefined,
-                  icon: <ServiceIcon url={tab.url} icon={tab.icon} />,
-                  trailing: (
-                    <TouchableOpacity
-                      hitSlop={8}
-                      accessibilityRole="button"
-                      accessibilityLabel={t('tabs.removeFromHistory')}
-                      onPress={(e) => {
-                        e?.stopPropagation?.()
-                        tabs$.removeClosedTab(tab.id)
-                      }}
-                    >
-                      <MaterialIcons name="close" size={16} color={tw(colors.iconSubtle)} />
-                    </TouchableOpacity>
-                  ),
-                  handler: () => tabs$.reopenClosedTab(tab.id),
-                })),
-                { label: '', handler: () => {}, kind: 'separator' as const },
-                {
-                  label: t('tabs.clearRecentlyClosed'),
-                  icon: <MaterialIcons name="delete-outline" size={18} color={tw(colors.iconSubtle)} />,
-                  handler: () => tabs$.clearRecentlyClosedTabs(),
-                },
-              ]}
-            />
-          </Tooltip>,
-        )}
-        {(() => {
-          const pageActions = visibleHeaderMenuActions<HeaderMenuItem>(
-            [
-              ...(isWeb
-                ? []
-                : [
-                    {
-                      id: 'reload' as const,
-                      label: t('menus.reload'),
-                      icon: <MaterialIcons name="refresh" size={18} color={headerControlColor} />,
-                      systemImage: 'arrow.clockwise',
-                      handler: reloadPage,
-                    },
-                    {
-                      id: 'scrollToTop' as const,
-                      label: t('menus.scroll'),
-                      icon: <MaterialIcons name="vertical-align-top" size={18} color={headerControlColor} />,
-                      systemImage: 'arrow.up.to.line',
-                      handler: scrollToTop,
-                    },
-                    {
-                      id: 'openUrl' as const,
-                      label: t('buttons.openUrl'),
-                      icon: <MaterialIcons name="language" size={18} color={headerControlColor} />,
-                      systemImage: 'globe',
-                      handler: editTabUrl,
-                    },
-                    ...(isFeedTab || !currentTab?.url
-                      ? []
-                      : [
-                          {
-                            id: 'findInPage' as const,
-                            label: t('menus.findInPage'),
-                            icon: <MaterialIcons name="find-in-page" size={18} color={headerControlColor} />,
-                            systemImage: 'text.magnifyingglass',
-                            handler: () => openFindInPage(tabs$.currentTab()?.id),
-                          },
-                        ]),
-                    ...(hideDesktopSiteToggle
-                      ? []
-                      : [
-                          {
-                            id: 'desktopSite' as const,
-                            label: t('menus.desktop'),
-                            icon: <MaterialIcons name="desktop-windows" size={18} color={headerControlColor} />,
-                            systemImage: 'desktopcomputer',
-                            checked: !!currentTab?.desktopMode,
-                            metaLabel: currentTab?.desktopMode ? t('common.on') : t('common.off'),
-                            meta: (
-                              <View
-                                className={clsx(
-                                  'rounded-full px-2 py-1',
-                                  currentTab?.desktopMode
-                                    ? 'bg-indigo-100 border border-indigo-300 dark:bg-indigo-500/20 dark:border-indigo-400/40'
-                                    : 'bg-zinc-200 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700',
-                                )}
-                              >
-                                <Text
-                                  className={clsx(
-                                    'text-[11px] font-medium',
-                                    currentTab?.desktopMode ? 'text-indigo-700 dark:text-indigo-200' : 'text-zinc-600 dark:text-zinc-400',
-                                  )}
-                                >
-                                  {currentTab?.desktopMode ? t('common.on') : t('common.off')}
-                                </Text>
-                              </View>
-                            ),
-                            handler: () => {
-                              const desktopMode = !currentTab?.desktopMode
-                              tabs$.tabs[activeTabIndex].desktopMode.toggle()
-                              setTimeout(() => {
-                                const target = activeWebview()
-                                if (currentTab?.url) {
-                                  const desktopUrl = desktopMode ? desktopSiteUrl(currentTab.url) : currentTab.url
-                                  if (desktopUrl !== currentTab.url) {
-                                    target?.loadUrl?.(desktopUrl)
-                                    return
-                                  }
-                                  const url = new URL(currentTab.url)
-                                  if (url.hostname === 'm.facebook.com' && desktopMode) {
-                                    url.hostname = 'www.facebook.com'
-                                    target?.loadUrl?.(url.toString())
-                                    return
-                                  }
-                                  if (url.hostname === 'www.facebook.com' && !desktopMode) {
-                                    url.hostname = 'm.facebook.com'
-                                    target?.loadUrl?.(url.toString())
-                                    return
-                                  }
-                                }
-                                reloadWebview(target, currentTab?.url)
-                              }, 0)
-                            },
-                          },
-                        ]),
-                    ...(!desktopLayout ? blocklistMenuItems : []),
-                    ...(!desktopLayout ? anonymousMenuItems : []),
-                    // Desktop has this in the tab context menu.
-                    ...(desktopLayout || isFeedTab || !currentTab?.url
-                      ? []
-                      : [
-                          {
-                            id: 'reopenInProfile' as const,
-                            label: t('menus.reopenInProfile'),
-                            icon: <MaterialIcons name="switch-account" size={18} color={headerControlColor} />,
-                            systemImage: 'person.crop.circle',
-                            handler: () => ui$.profileTabId.set(currentTab.id),
-                          },
-                        ]),
-                    ...watchMenuItems,
-                    ...(isFeedTab
-                      ? []
-                      : [
-                          {
-                            id: 'zoom' as const,
-                            label: t('menus.zoom') || 'Zoom',
-                            icon: <MaterialIcons name="zoom-in" size={18} color={headerControlColor} />,
-                            systemImage: 'plus.magnifyingglass',
-                            metaLabel: `${resolveZoom(host, siteZoom, defaultZoom)}%`,
-                            handler: () => ui$.zoomModalOpen.set(true),
-                          },
-                        ]),
-                    {
-                      id: 'addBookmark' as const,
-                      label: t('menus.addBookmark'),
-                      icon: <MaterialIcons name="bookmark-add" size={18} color={headerControlColor} />,
-                      systemImage: 'bookmark',
-                      handler: addBookmark,
-                    },
-                    ...(isFeedTab
-                      ? []
-                      : [
-                          {
-                            id: 'share' as const,
-                            label: t('menus.share'),
-                            icon: <MaterialIcons name="share" size={18} color={headerControlColor} />,
-                            systemImage: 'square.and.arrow.up',
-                            handler: () => (currentTab ? share(currentTab.url) : {}),
-                          },
-                        ]),
-                    ...(currentTab && canPinTabToHomeScreen(currentTab)
-                      ? [
-                          {
-                            id: 'addToHomeScreen' as const,
-                            label: t('menus.addToHomeScreen'),
-                            icon: <MaterialIcons name="add-to-home-screen" size={18} color={headerControlColor} />,
-                            handler: () => {
-                              void pinTabToHomeScreen(currentTab)
-                            },
-                          },
-                        ]
-                      : []),
-                  ]),
-            ],
-            hiddenHeaderMenuActions,
-          )
-          const appActions = visibleHeaderMenuActions<HeaderMenuItem>(
-            [
-              ...(!feedEnabled
-                ? []
-                : [
-                    {
-                      id: 'feed' as const,
-                      label: t('feed.label'),
-                      icon: <MaterialIcons name="rss-feed" size={18} color={headerControlColor} />,
-                      systemImage: 'list.bullet.rectangle',
-                      metaLabel: feedUnreadCount ? String(feedUnreadCount) : undefined,
-                      handler: () => openFeedTab(),
-                    },
-                  ]),
-              {
-                id: 'tools',
-                label: t('menus.tools'),
-                icon: <MaterialIcons name="build" size={18} color={headerControlColor} />,
-                systemImage: 'wrench.and.screwdriver',
-                handler: () => ui$.toolsModalOpen.set(true),
-              },
-            ],
-            hiddenHeaderMenuActions,
-          )
-          return (
-            <Tooltip title={t('menus.more')}>
+          desktopLayout && !sidebarCollapsed,
+          <View className="flex-row items-center gap-0.5">
+            <Tooltip title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}>
+              <button
+                type="button"
+                className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-white/10 transition-colors bg-transparent border-0 p-0 cursor-pointer outline-none"
+                onClick={() => {
+                  const next = isDark ? 'light' : 'dark'
+                  settings$.theme.set(next)
+                  Appearance.setColorScheme?.(next)
+                }}
+              >
+                <MaterialIcons name={isDark ? 'light-mode' : 'dark-mode'} size={18} color="#94a3b8" />
+              </button>
+            </Tooltip>
+            <Tooltip title={t('buttons.restoreTabs') || 'Recently Closed Tabs'}>
               <NouMenu
-                triggerColor={headerControlColor}
-                triggerSize={44}
                 trigger={
-                  isIos
-                    ? 'ellipsis'
-                    : <MaterialButton name="more-vert" accessibilityLabel={t('menus.more')} size={headerIconSize} color={headerControlColor} style={headerButtonStyle} />
+                  <button
+                    type="button"
+                    className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-white/10 transition-colors bg-transparent border-0 p-0 cursor-pointer outline-none"
+                    title={t('buttons.restoreTabs') || 'Recently Closed Tabs'}
+                  >
+                    <MaterialIcons name="history" size={18} color="#94a3b8" />
+                  </button>
                 }
-                items={[
-                  ...pageActions,
-                  ...(pageActions.length ? [{ label: '', handler: () => {}, kind: 'separator' as const }] : []),
-                  ...appActions,
-                  {
-                    label: t('settings.label'),
-                    icon: <MaterialIcons name="settings" size={18} color={headerControlColor} />,
-                    systemImage: 'gearshape',
-                    handler: () => ui$.settingsModalOpen.set(true),
-                  },
-                ]}
+                items={
+                  recentlyClosedTabs.length > 0
+                    ? [
+                        ...recentlyClosedTabs.map((tab) => ({
+                          label: tab.title || tab.url || t('tabs.new'),
+                          description: tab.title && tab.url && tab.title !== tab.url ? tab.url : undefined,
+                          icon: <ServiceIcon url={tab.url} icon={tab.icon} />,
+                          trailing: (
+                            <TouchableOpacity
+                              hitSlop={8}
+                              accessibilityRole="button"
+                              accessibilityLabel={t('tabs.removeFromHistory')}
+                              onPress={(e) => {
+                                e?.stopPropagation?.()
+                                tabs$.removeClosedTab(tab.id)
+                              }}
+                            >
+                              <MaterialIcons name="close" size={16} color={tw(colors.iconSubtle)} />
+                            </TouchableOpacity>
+                          ),
+                          handler: () => tabs$.reopenClosedTab(tab.id),
+                        })),
+                        { label: '', handler: () => {}, kind: 'separator' as const },
+                        {
+                          label: t('tabs.clearRecentlyClosed'),
+                          icon: <MaterialIcons name="delete-outline" size={18} color={tw(colors.iconSubtle)} />,
+                          handler: () => tabs$.clearRecentlyClosedTabs(),
+                        },
+                      ]
+                    : [
+                        {
+                          label: t('tabs.noClosedTabs') || 'No recently closed tabs',
+                          handler: () => {},
+                        },
+                      ]
+                }
               />
             </Tooltip>
-          )
-        })()}
+            <Tooltip title={t('settings.label') || 'Settings'}>
+              <button
+                type="button"
+                className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-white/10 transition-colors bg-transparent border-0 p-0 cursor-pointer outline-none"
+                onClick={() => ui$.settingsModalOpen.set(true)}
+              >
+                <MaterialIcons name="settings" size={18} color="#94a3b8" />
+              </button>
+            </Tooltip>
+            {moreMenu}
+          </View>,
+        )}
+        {nIf(
+          desktopLayout && sidebarCollapsed,
+          <>
+            <Tooltip title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}>
+              <button
+                type="button"
+                className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-white/10 transition-colors bg-transparent border-0 p-0 cursor-pointer outline-none"
+                onClick={() => {
+                  const next = isDark ? 'light' : 'dark'
+                  settings$.theme.set(next)
+                  Appearance.setColorScheme?.(next)
+                }}
+              >
+                <MaterialIcons name={isDark ? 'light-mode' : 'dark-mode'} size={18} color="#94a3b8" />
+              </button>
+            </Tooltip>
+            <Tooltip title={t('buttons.restoreTabs') || 'Recently Closed Tabs'}>
+              <NouMenu
+                trigger={
+                  <button
+                    type="button"
+                    className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-white/10 transition-colors bg-transparent border-0 p-0 cursor-pointer outline-none"
+                    title={t('buttons.restoreTabs') || 'Recently Closed Tabs'}
+                  >
+                    <MaterialIcons name="history" size={18} color="#94a3b8" />
+                  </button>
+                }
+                items={
+                  recentlyClosedTabs.length > 0
+                    ? [
+                        ...recentlyClosedTabs.map((tab) => ({
+                          label: tab.title || tab.url || t('tabs.new'),
+                          description: tab.title && tab.url && tab.title !== tab.url ? tab.url : undefined,
+                          icon: <ServiceIcon url={tab.url} icon={tab.icon} />,
+                          trailing: (
+                            <TouchableOpacity
+                              hitSlop={8}
+                              accessibilityRole="button"
+                              accessibilityLabel={t('tabs.removeFromHistory')}
+                              onPress={(e) => {
+                                e?.stopPropagation?.()
+                                tabs$.removeClosedTab(tab.id)
+                              }}
+                            >
+                              <MaterialIcons name="close" size={16} color={tw(colors.iconSubtle)} />
+                            </TouchableOpacity>
+                          ),
+                          handler: () => tabs$.reopenClosedTab(tab.id),
+                        })),
+                        { label: '', handler: () => {}, kind: 'separator' as const },
+                        {
+                          label: t('tabs.clearRecentlyClosed'),
+                          icon: <MaterialIcons name="delete-outline" size={18} color={tw(colors.iconSubtle)} />,
+                          handler: () => tabs$.clearRecentlyClosedTabs(),
+                        },
+                      ]
+                    : [
+                        {
+                          label: t('tabs.noClosedTabs') || 'No recently closed tabs',
+                          handler: () => {},
+                        },
+                      ]
+                }
+              />
+            </Tooltip>
+            <Tooltip title={t('settings.label') || 'Settings'}>
+              <button
+                type="button"
+                className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-white/10 transition-colors bg-transparent border-0 p-0 cursor-pointer outline-none"
+                onClick={() => ui$.settingsModalOpen.set(true)}
+              >
+                <MaterialIcons name="settings" size={18} color="#94a3b8" />
+              </button>
+            </Tooltip>
+            {moreMenu}
+          </>,
+        )}
+        {nIf(!desktopLayout, trailingControls)}
       </View>
     </HeaderRoot>
   )

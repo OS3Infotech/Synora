@@ -104,11 +104,11 @@ export const SortableDesktopTab: React.FC<{
           isDeck && isVisible
             ? 'flex min-h-0 cursor-grab active:cursor-grabbing transition-opacity rounded-xl'
             : isSingle && isVisible
-              ? 'overflow-hidden rounded-xl'
+              ? 'flex flex-col h-full w-full overflow-hidden rounded-xl'
               : isSplit && isVisible
-                ? 'flex-1 min-w-0 min-h-0 overflow-hidden rounded-xl'
+                ? 'flex flex-col flex-1 min-w-0 min-h-0 h-full overflow-hidden rounded-xl'
                 : isVisible && viewLayout !== 'deck'
-                  ? 'absolute overflow-hidden border border-zinc-300 dark:border-zinc-800 bg-white dark:bg-zinc-900 rounded-xl'
+                  ? 'flex flex-col absolute overflow-hidden border border-zinc-300 dark:border-zinc-800 bg-white dark:bg-zinc-900 rounded-xl'
                   : 'absolute overflow-hidden',
           active?.id === tab.id && 'opacity-30 z-10',
         )}

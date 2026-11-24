@@ -20,6 +20,11 @@ import { useTabContextMenuItems } from '@/lib/hooks/useTabContextMenuItems'
 import { getGroupedTabIds, getTabGroupsKey } from '@/lib/tab-groups'
 import { createDesktopTabGroup, tabGroups$, type TabGroup, type TabGroupLayout } from '@/states/tab-groups'
 import { openDesktopTab, sortTabsByOrder, tabs$, type Tab } from '@/states/tabs'
+import { settings$ } from '@/states/settings'
+import { isTabInProfile } from '@/lib/profile'
+import { ProfileSwitcher } from '@/components/profile/ProfileSwitcher'
+import { SidebarSections } from '@/components/sidebar/SidebarSections'
+import { isFeedTabUrl } from '@/lib/feed-tab'
 import { ui$ } from '@/states/ui'
 import { getLayoutLabel, getTabLabel } from '@/components/tab/desktop/desktopWorkspaceShared'
 import { useTwColor } from '@/lib/theme'
@@ -240,7 +245,7 @@ const TabRow: React.FC<{
       </NouLongPressMenu>
       <Pressable
         className="h-6 w-6 shrink-0 items-center justify-center rounded-md"
-        onPress={() => tabs$.closeTab(tabs$.tabs.get().findIndex((currentTab) => currentTab.id === tab.id))}
+        onPress={() => tabs$.closeTabsByIds([tab.id])}
       >
         <MaterialIcons name="close" size={14} color={tw('#a1a1aa')} />
       </Pressable>
@@ -375,7 +380,12 @@ const GroupSection: React.FC<{
 
 export const DesktopTabsSidebar: React.FC<{ collapsed?: boolean }> = ({ collapsed = false }) => {
   const tw = useTwColor()
-  const tabs = useValue(tabs$.tabs)
+  const allTabs = useValue(tabs$.tabs)
+  const selectedProfileId = useValue(settings$.selectedProfileId) || 'default'
+  const tabs = useMemo(
+    () => (selectedProfileId === 'all' ? allTabs : allTabs.filter((tab) => isTabInProfile(tab, selectedProfileId))),
+    [allTabs, selectedProfileId],
+  )
   const orders = useValue(tabs$.orders)
   const activeTabIndex = useValue(tabs$.activeTabIndex)
   const activeGroupId = useValue(tabGroups$.activeGroupId)
@@ -390,11 +400,16 @@ export const DesktopTabsSidebar: React.FC<{ collapsed?: boolean }> = ({ collapse
 
   const tabIdsKey = tabs.map((tab) => tab.id).join('|')
   const orderedTabs = useMemo(() => sortTabsByOrder(tabs, orders), [tabIdsKey, orders])
-  const activeTabId = tabs[activeTabIndex]?.id
+  const activeTab = allTabs[activeTabIndex]
+  const activeTabId = activeTab && tabs.some((tab) => tab.id === activeTab.id) ? activeTab.id : undefined
   const groupsKey = getTabGroupsKey(groups)
   const groupedTabIds = useMemo(() => getGroupedTabIds(groups), [groupsKey])
   const tabById = useMemo(() => new Map(tabs.map((tab) => [tab.id, tab])), [tabIdsKey])
-  const ungroupedTabs = orderedTabs.filter((tab) => !groupedTabIds.has(tab.id))
+  const workspaceTabs = useMemo(
+    () => orderedTabs.filter((tab) => !isFeedTabUrl(tab.url)),
+    [orderedTabs],
+  )
+  const ungroupedTabs = workspaceTabs.filter((tab) => !groupedTabIds.has(tab.id))
 
   const openMenu = (items: Item[], x: number, y: number) => {
     setTimeout(() => {
@@ -417,7 +432,15 @@ export const DesktopTabsSidebar: React.FC<{ collapsed?: boolean }> = ({ collapse
     handler: () => createDesktopTabGroup(layout),
   }))
 
-  const groupSections = groups.map((group) => {
+  const profileGroups = useMemo(
+    () =>
+      selectedProfileId === 'all'
+        ? groups
+        : groups.filter((group) => group.tabIds.some((tabId) => tabId && tabById.has(tabId))),
+    [groups, selectedProfileId, tabById],
+  )
+
+  const groupSections = profileGroups.map((group) => {
     const groupTabs = group.tabIds
       .filter((tabId): tabId is string => typeof tabId === 'string')
       .map((tabId) => tabById.get(tabId))
@@ -439,12 +462,22 @@ export const DesktopTabsSidebar: React.FC<{ collapsed?: boolean }> = ({ collapse
 
   if (collapsed) {
     return (
-      <View className="h-full w-full flex-col bg-zinc-100 dark:bg-zinc-900">
+      <View className="h-full w-full flex-col bg-zinc-100 dark:bg-[#0c0d12]">
+        <View className="pt-2 px-1">
+          <ProfileSwitcher mode="space" collapsed />
+        </View>
         <ScrollView
           ref={setSidebarViewportRef}
           className="flex-1"
-          contentContainerClassName="gap-2 items-center px-1 pb-2 pt-1"
+          contentContainerClassName="gap-1 items-center px-1 pb-2 pt-1"
         >
+          <SidebarSections
+            collapsed
+            activeTabId={activeTabId}
+            aiTabs={aiTabs}
+            socialTabs={socialTabs}
+            newsTabs={newsTabs}
+          />
           <Pressable className="h-10 w-10 items-center justify-center rounded-md" onPress={newTab}>
             <MaterialIcons name="add" size={20} color={iconColor} />
           </Pressable>
@@ -478,12 +511,18 @@ export const DesktopTabsSidebar: React.FC<{ collapsed?: boolean }> = ({ collapse
   }
 
   return (
-    <View className="h-full w-full flex-col bg-zinc-100 dark:bg-zinc-900">
+    <View className="h-full w-full flex-col bg-zinc-100 dark:bg-[#0c0d12]">
+      <View className="px-1.5 pt-2 pb-1">
+        <ProfileSwitcher mode="space" collapsed={false} />
+      </View>
       <ScrollView
         ref={setSidebarViewportRef}
         className="flex-1"
-        contentContainerClassName="gap-3 px-2 pb-3 pt-1"
+        contentContainerClassName="gap-2 px-2 pb-3 pt-1"
       >
+        <SidebarSections
+          collapsed={false}
+        />
         <View>
           <View className="mb-1 flex-row items-center justify-between px-2 py-1">
             <NouText className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">

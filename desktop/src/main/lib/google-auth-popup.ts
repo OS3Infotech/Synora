@@ -1,119 +1,126 @@
-import { BrowserWindow, Session, session } from 'electron'
-import { mainWindow } from './main-window'
-import { uiClient } from '../ipc/ui'
+// OAuth popup and URL classification helpers for desktop
 
 /**
- * Hosts that serve Google OAuth consent / login flows.
+ * Determines whether a hostname belongs to a Google account/auth endpoint.
+ * Supports accounts.google.com and all regional ccTLDs (e.g. accounts.google.co.in, accounts.google.co.uk, accounts.google.co.jp, etc.).
  */
-const GOOGLE_AUTH_HOSTS = new Set([
-  'accounts.google.com',
-  'accounts.google.co.in',
-  'accounts.google.co.uk',
-  'accounts.google.com.au',
-  'accounts.youtube.com',
-])
+export function isGoogleAuthHost(host: string): boolean {
+  const lower = host.toLowerCase()
+  return (
+    lower === 'accounts.google.com' ||
+    lower.startsWith('accounts.google.') ||
+    lower === 'accounts.youtube.com' ||
+    lower.startsWith('accounts.youtube.')
+  )
+}
 
 export function isGoogleAuthUrl(url: string): boolean {
   try {
     const { host } = new URL(url)
-    return GOOGLE_AUTH_HOSTS.has(host.toLowerCase())
+    return isGoogleAuthHost(host)
   } catch {
     return false
   }
 }
 
 /**
- * Firefox desktop User-Agent string.
- *
- * Google blocks embedded Chromium/Electron browsers with "This browser or app
- * may not be secure" because it inspects Client Hints (`Sec-CH-UA`) and anomalous
- * Chromium fingerprints. Since Firefox does not use Client Hints or Chromium internals,
- * Google evaluates it via standard web flow and allows the OAuth login.
+ * Checks whether a URL is an OAuth authentication flow (Google Sign-In, LinkedIn OAuth, X/Twitter login flow)
+ * or a transient placeholder popup (`about:blank`) initialized by client-side OAuth libraries.
  */
-export const FIREFOX_UA =
-  process.platform === 'darwin'
-    ? 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:133.0) Gecko/20100101 Firefox/133.0'
-    : process.platform === 'win32'
-    ? 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0'
-    : 'Mozilla/5.0 (X11; Linux x86_64; rv:133.0) Gecko/20100101 Firefox/133.0'
-
-const configuredSessions = new WeakSet<Session>()
-
-/**
- * Strips Chromium client hints and injects a standard Firefox User-Agent
- * specifically for requests to Google accounts endpoints.
- */
-export function setupGoogleAuthSession(ses: Session): void {
-  if (configuredSessions.has(ses)) {
-    return
-  }
-  configuredSessions.add(ses)
-
-  const filter = {
-    urls: [
-      'https://accounts.google.com/*',
-      'https://accounts.google.co.in/*',
-      'https://accounts.google.co.uk/*',
-      'https://accounts.google.com.au/*',
-      'https://accounts.youtube.com/*',
-    ],
+export function isOAuthPopupUrl(url: string, _sourceUrl?: string): boolean {
+  if (!url || url === 'about:blank' || url.startsWith('about:')) {
+    return true
   }
 
-  ses.webRequest.onBeforeSendHeaders(filter, (details, callback) => {
-    if (isGoogleAuthUrl(details.url)) {
-      delete details.requestHeaders['sec-ch-ua']
-      delete details.requestHeaders['sec-ch-ua-mobile']
-      delete details.requestHeaders['sec-ch-ua-platform']
-      delete details.requestHeaders['sec-ch-ua-platform-version']
-      delete details.requestHeaders['sec-ch-ua-model']
-      details.requestHeaders['User-Agent'] = FIREFOX_UA
+  try {
+    const parsed = new URL(url)
+    const host = parsed.host.toLowerCase()
+    const path = parsed.pathname.toLowerCase()
+    const search = parsed.search.toLowerCase()
+
+    if (isGoogleAuthHost(host)) {
+      return true
     }
-    callback({ requestHeaders: details.requestHeaders })
-  })
+
+    if (host === 'appleid.apple.com') {
+      return true
+    }
+
+    // Facebook / Meta login and OAuth flows (including "Log in with Facebook" on Instagram)
+    if (host.includes('facebook.com') || host.includes('fb.com')) {
+      if (
+        path.includes('/dialog/oauth') ||
+        path.includes('/login') ||
+        path.includes('/oauth') ||
+        path.includes('/plugins/login') ||
+        search.includes('client_id') ||
+        search.includes('redirect_uri')
+      ) {
+        return true
+      }
+    }
+
+    // Instagram OAuth and account sign-in popup flows
+    if (host.includes('instagram.com')) {
+      if (
+        path.includes('/accounts/login') ||
+        path.includes('/accounts/emailsignup') ||
+        path.includes('/oauth') ||
+        path.includes('/login') ||
+        search.includes('client_id')
+      ) {
+        return true
+      }
+    }
+
+    // LinkedIn Google and OAuth popup flows
+    if (host.includes('linkedin.com')) {
+      if (
+        path.includes('connect/google') ||
+        path.includes('/uas/oauth') ||
+        path.includes('/checkpoint/oauth') ||
+        path.includes('/oauth') ||
+        search.includes('google')
+      ) {
+        return true
+      }
+    }
+
+    // X (Twitter) Google and OAuth login flows
+    if (host.includes('x.com') || host.includes('twitter.com')) {
+      if (
+        path.includes('/i/flow/login') ||
+        path.includes('/i/flow/signup') ||
+        path.includes('/i/oauth') ||
+        path.includes('/oauth') ||
+        search.includes('google')
+      ) {
+        return true
+      }
+    }
+
+    // Microsoft, GitHub, Discord OAuth login flows
+    if (
+      host === 'login.microsoftonline.com' ||
+      host === 'login.live.com' ||
+      (host === 'github.com' && path.includes('/login/oauth')) ||
+      (host.includes('discord.com') && path.includes('/oauth2'))
+    ) {
+      return true
+    }
+
+    // General OAuth 2.0 / OpenID Connect authorization popups
+    if (
+      (search.includes('client_id=') && (search.includes('redirect_uri=') || search.includes('response_type='))) ||
+      path.includes('/oauth/authorize') ||
+      path.includes('/oauth2/authorize')
+    ) {
+      return true
+    }
+
+    return false
+  } catch {
+    return false
+  }
 }
 
-/**
- * Open a temporary child BrowserWindow for Google OAuth if needed directly.
- */
-export function openGoogleAuthPopup(url: string, partition: string): BrowserWindow {
-  const parent = mainWindow ?? undefined
-  const targetSession = session.fromPartition(partition)
-  setupGoogleAuthSession(targetSession)
-
-  const popup = new BrowserWindow({
-    width: 520,
-    height: 680,
-    parent,
-    modal: false,
-    autoHideMenuBar: true,
-    webPreferences: {
-      sandbox: false,
-      contextIsolation: true,
-      session: targetSession,
-    },
-  })
-
-  popup.webContents.setUserAgent(FIREFOX_UA)
-
-  const dispatchCallback = (callbackUrl: string) => {
-    if (!popup.isDestroyed()) {
-      popup.close()
-    }
-    uiClient.handleDeeplink(callbackUrl)
-  }
-
-  popup.webContents.on('will-navigate', (_event, navUrl) => {
-    if (navUrl.startsWith('nora:')) {
-      dispatchCallback(navUrl)
-    }
-  })
-
-  popup.webContents.on('will-redirect', (_event, navUrl) => {
-    if (navUrl.startsWith('nora:')) {
-      dispatchCallback(navUrl)
-    }
-  })
-
-  popup.loadURL(url, { userAgent: FIREFOX_UA })
-  return popup
-}

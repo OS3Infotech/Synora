@@ -263,6 +263,8 @@ const WebTab: React.FC<NoraTabProps> = ({
   const videoEdgeLongPressTo2x = useValue(settings$.videoEdgeLongPressTo2x)
   const videoDefaultSpeed = useValue(settings$.videoDefaultSpeed)
   const pullToRefresh = useValue(settings$.pullToRefresh)
+  const allTabs = useValue(tabs$.tabs)
+  const allTabsIndex = allTabs.findIndex((t) => t?.id === tab.id)
   const translateOnDoubleTap = useValue(settings$.translateOnDoubleTap)
   const translationTargetLanguage = useValue(settings$.translationTargetLanguage)
   const xDefaultHomeTimeline = useValue(settings$.xDefaultHomeTimeline)
@@ -1047,7 +1049,7 @@ const WebTab: React.FC<NoraTabProps> = ({
               )}
             </View>
             <View className="rounded hover:bg-zinc-300/70 dark:hover:bg-zinc-700/70">
-              <MaterialButton name="close" onPress={() => tabs$.closeTab(index)} style={toolbarButtonStyle} size={16} />
+              <MaterialButton name="close" onPress={() => tabs$.closeTab(allTabsIndex >= 0 ? allTabsIndex : index)} style={toolbarButtonStyle} size={16} />
             </View>
           </View>
         </NouContextMenu>
@@ -1059,7 +1061,7 @@ const WebTab: React.FC<NoraTabProps> = ({
             <NouText className="text-center text-xs text-zinc-500 dark:text-zinc-400">{t('tabs.pausedHint')}</NouText>
             <Pressable
               className="mt-2 flex-row items-center gap-1 rounded-full bg-indigo-500 px-4 py-2 hover:bg-indigo-600 active:bg-indigo-600"
-              onPress={() => tabs$.setTabPaused(false, index)}
+              onPress={() => tabs$.setTabPaused(false, allTabsIndex >= 0 ? allTabsIndex : index)}
             >
               <MaterialIcons name="play-arrow" size={16} color="#ffffff" />
               <NouText className="text-xs font-semibold" style={{ color: '#ffffff' }}>
@@ -1071,24 +1073,25 @@ const WebTab: React.FC<NoraTabProps> = ({
           <View className="flex-1 min-h-0 items-center justify-center">
             <ActivityIndicator size="small" color={tw('#a1a1aa')} />
           </View>
+        ) : !tab.url ? (
+          <View className="flex-1 min-h-0 w-full h-full">
+            <NavModalContent index={allTabsIndex >= 0 ? allTabsIndex : index} />
+          </View>
         ) : (
-          <NoraView
-            className={clsx('flex-1 min-h-0', !tab.url && 'hidden')}
-            style={{ clipPath: 'inset(0 round 0 0 11px 11px)' }}
-            ref={noraViewRef}
-            partition={`persist:${tab.profile || 'default'}`}
-            useragent={getUserAgent(window.electron.process.platform, true)}
-            inspectable={inspectable}
-            allowpopups="true"
-            key={viewInstanceKey}
-            textZoom={resolvedZoom}
-          />
-        )}
-        {nIf(
-          !tab.url,
-          <View className="flex-1 min-h-0">
-            <NavModalContent index={index} />
-          </View>,
+          <div className="relative flex-1 min-h-0 w-full h-full overflow-hidden">
+            <NoraView
+              src={tab.url}
+              className="w-full h-full flex-1 min-h-0"
+              style={{ width: '100%', height: '100%', flex: 1, clipPath: 'inset(0 round 0 0 11px 11px)' }}
+              ref={noraViewRef}
+              partition={`persist:${tab.profile || 'default'}`}
+              useragent={getUserAgent(window.electron.process.platform, true)}
+              inspectable={inspectable}
+              allowpopups="true"
+              key={viewInstanceKey}
+              textZoom={resolvedZoom}
+            />
+          </div>
         )}
       </View>
     )

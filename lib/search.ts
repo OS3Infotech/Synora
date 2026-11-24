@@ -12,6 +12,7 @@ export type BuiltinSearchProviderId =
   | 'url'
   | 'duckduckgo'
   | 'google'
+  | 'brave'
   | 'bluesky'
   | 'facebook'
   | 'facebook-messenger'
@@ -45,7 +46,7 @@ export interface ResolvedSearchProvider {
 
 const encodedPlaceholder = '__NORA_SEARCH_QUERY__'
 
-export const defaultEnabledSearchProviderIds = ['url', 'duckduckgo', 'google'] as const
+export const defaultEnabledSearchProviderIds = ['url', 'duckduckgo', 'google', 'brave'] as const
 
 export const builtinSearchProviders: Record<BuiltinSearchProviderId, BuiltinSearchProviderDefinition> = {
   url: {
@@ -64,6 +65,12 @@ export const builtinSearchProviders: Record<BuiltinSearchProviderId, BuiltinSear
     name: 'Google',
     kind: 'builtin',
     templateUrl: 'https://www.google.com/search?q=%s',
+  },
+  brave: {
+    id: 'brave',
+    name: 'Brave Search',
+    kind: 'builtin',
+    templateUrl: 'https://search.brave.com/search?q=%s',
   },
   bluesky: {
     id: 'bluesky',
@@ -210,6 +217,10 @@ export function normalizeEnabledSearchProviderIds(
 ) {
   const validIds = new Set<string>([...builtinSearchProviderIds, ...customProviders.map((provider) => provider.id)])
   const source = enabledIds?.length ? enabledIds : [...defaultEnabledSearchProviderIds]
+  // Always include newly introduced default built-in search providers (like brave) if not explicitly customized
+  if (enabledIds?.length && !enabledIds.includes('brave')) {
+    source.push('brave')
+  }
   const next = ['url', ...source.filter((id) => id !== 'url' && validIds.has(id))]
   return Array.from(new Set(next))
 }

@@ -7,6 +7,8 @@ import { useValue } from '@legendapp/state/react'
 import { Pressable, ScrollView, View, useColorScheme } from 'react-native'
 import { t } from 'i18next'
 import { NouContextMenu, type ContextItem } from '@/components/menu/NouContextMenu'
+import { NouMenu, type Item } from '@/components/menu/NouMenu'
+import { ServiceIcon } from '@/components/service/Services'
 import { NouText } from '@/components/NouText'
 import { openTabInDesktopGroup } from '@/lib/desktop-view-actions'
 import {
@@ -22,6 +24,13 @@ import {
 import { getGroupedTabIds, getTabGroupsKey } from '@/lib/tab-groups'
 import { createDesktopTabGroup, tabGroups$, type TabGroup, type TabGroupLayout } from '@/states/tab-groups'
 import { sortTabsByOrder, tabs$, type Tab } from '@/states/tabs'
+import { settings$ } from '@/states/settings'
+import { isTabInProfile } from '@/lib/profile'
+import { ProfileSwitcher } from '@/components/profile/ProfileSwitcher'
+import { SidebarSections } from '@/components/sidebar/SidebarSections'
+import { Tooltip } from '@/components/tooltip/Tooltip'
+import { clsx } from '@/lib/utils'
+import { isFeedTabUrl } from '@/lib/feed-tab'
 import {
   GroupSectionPreview,
   ItemGapDropZone,
@@ -70,9 +79,19 @@ const samePreviewState = (left: PreviewState, right: PreviewState) =>
   left.groups.every((group, index) => group.id === right.groups[index]?.id && sameIds(group.tabIds, right.groups[index].tabIds))
 
 export const DesktopTabsSidebar: React.FC<{ collapsed?: boolean }> = ({ collapsed = false }) => {
-  const tabs = useValue(tabs$.tabs)
-  const orders = useValue(tabs$.orders)
+  const allTabs = useValue(tabs$.tabs)
+  const selectedProfileId = useValue(settings$.selectedProfileId) || 'default'
   const activeTabIndex = useValue(tabs$.activeTabIndex)
+  const activeTab = allTabs[activeTabIndex]
+  const tabs = useMemo(() => {
+    if (selectedProfileId === 'all') return allTabs
+    const filtered = allTabs.filter((tab) => isTabInProfile(tab, selectedProfileId))
+    if (activeTab && !filtered.some((tab) => tab.id === activeTab.id)) {
+      return [...filtered, activeTab]
+    }
+    return filtered
+  }, [allTabs, selectedProfileId, activeTab])
+  const orders = useValue(tabs$.orders)
   const activeGroupId = useValue(tabGroups$.activeGroupId)
   const groups = useValue(tabGroups$.groups)
   const sidebarOrder = useValue(tabGroups$.sidebarOrder)
@@ -87,19 +106,32 @@ export const DesktopTabsSidebar: React.FC<{ collapsed?: boolean }> = ({ collapse
 
   const tabIdsKey = tabs.map((tab) => tab.id).join('|')
   const orderedTabs = useMemo(() => sortTabsByOrder(tabs, orders), [tabIdsKey, orders])
-  const activeTabId = tabs[activeTabIndex]?.id
+  const activeTabId = activeTab && tabs.some((tab) => tab.id === activeTab.id) ? activeTab.id : undefined
   const draggingTab = draggingTabId ? tabs.find((tab) => tab.id === draggingTabId) ?? null : null
   const groupsKey = getTabGroupsKey(groups)
   const groupedTabIds = useMemo(() => getGroupedTabIds(groups), [groupsKey])
   const tabById = useMemo(() => new Map(tabs.map((tab) => [tab.id, tab])), [tabIdsKey])
+
+  const workspaceTabs = useMemo(
+    () => orderedTabs.filter((tab) => !isFeedTabUrl(tab.url)),
+    [orderedTabs],
+  )
+
   const ungroupedTabIds = useMemo(
-    () => orderedTabs.filter((tab) => !groupedTabIds.has(tab.id)).map((tab) => tab.id),
-    [orderedTabs, groupedTabIds],
+    () => workspaceTabs.filter((tab) => !groupedTabIds.has(tab.id)).map((tab) => tab.id),
+    [workspaceTabs, groupedTabIds],
+  )
+  const profileGroups = useMemo(
+    () =>
+      selectedProfileId === 'all'
+        ? groups
+        : groups.filter((group) => group.tabIds.some((tabId) => tabId && tabById.has(tabId))),
+    [groups, selectedProfileId, tabById],
   )
   // Ungrouped tabs and group sections in one order, so a group can sit between two tabs.
   const items = useMemo(
-    () => getSidebarItems(ungroupedTabIds, groups.map((group) => group.id), sidebarOrder),
-    [ungroupedTabIds, groupsKey, sidebarOrder],
+    () => getSidebarItems(ungroupedTabIds, profileGroups.map((group) => group.id), sidebarOrder),
+    [ungroupedTabIds, profileGroups, sidebarOrder],
   )
 
   const sensors = useSensors(
@@ -351,6 +383,42 @@ export const DesktopTabsSidebar: React.FC<{ collapsed?: boolean }> = ({ collapse
   }))
 
   const recentlyClosedTabs = useValue(tabs$.recentlyClosedTabs)
+  const restoreMenuItems: Item[] =
+    recentlyClosedTabs.length > 0
+      ? [
+          ...recentlyClosedTabs.map((tab) => ({
+            label: tab.title || tab.url || t('tabs.new') || 'New Tab',
+            description: tab.title && tab.url && tab.title !== tab.url ? tab.url : undefined,
+            icon: <ServiceIcon url={tab.url} icon={tab.icon} />,
+            trailing: (
+              <Pressable
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel={t('tabs.removeFromHistory') || 'Remove'}
+                onPress={(e) => {
+                  e?.stopPropagation?.()
+                  tabs$.removeClosedTab(tab.id)
+                }}
+              >
+                <MaterialIcons name="close" size={16} color="#94a3b8" />
+              </Pressable>
+            ),
+            handler: () => tabs$.reopenClosedTab(tab.id),
+          })),
+          { label: '', handler: () => {}, kind: 'separator' as const },
+          {
+            label: t('tabs.clearRecentlyClosed') || 'Clear history',
+            icon: <MaterialIcons name="delete-outline" size={18} color="#94a3b8" />,
+            handler: () => tabs$.clearRecentlyClosedTabs(),
+          },
+        ]
+      : [
+          {
+            label: t('tabs.noClosedTabs') || 'No recently closed tabs',
+            handler: () => {},
+          },
+        ]
+
   const sidebarContextItems: ContextItem[] = [
     {
       label: `${t('tabs.new')} (${NEW_TAB_SHORTCUT})`,
@@ -378,7 +446,13 @@ export const DesktopTabsSidebar: React.FC<{ collapsed?: boolean }> = ({ collapse
       label: t('buttons.closeAll'),
       icon: <MaterialIcons name="tab-unselected" size={14} color="#f87171" />,
       color: 'red',
-      handler: () => tabs$.closeAll(),
+      handler: () => {
+        if (selectedProfileId === 'all') {
+          tabs$.closeAll()
+        } else {
+          tabs$.closeTabsByIds(tabs.map((t) => t.id))
+        }
+      },
     },
   ]
 
@@ -448,7 +522,7 @@ export const DesktopTabsSidebar: React.FC<{ collapsed?: boolean }> = ({ collapse
               ? 'h-9 w-9 items-center justify-center rounded-lg transition-colors hover:bg-zinc-200/70 dark:hover:bg-zinc-800'
               : 'min-h-8 flex-row items-center gap-2 rounded-md px-2 py-1 transition-colors hover:bg-zinc-200/70 dark:hover:bg-zinc-800'
           }
-          onPress={() => openTabInDesktopGroup(null)}
+          onPress={() => openTabInDesktopGroup(null, '')}
         >
           {collapsed ? (
             <MaterialIcons name="add" size={20} color={newTabIconColor} />
@@ -489,24 +563,90 @@ export const DesktopTabsSidebar: React.FC<{ collapsed?: boolean }> = ({ collapse
     >
       <NouContextMenu items={sidebarContextItems}>
         <div className="h-full w-full" {...sidebarDropProps}>
-          <View className="h-full w-full flex-col bg-zinc-100 dark:bg-zinc-900">
+          <View className="h-full w-full flex-col bg-zinc-100 dark:bg-[#0c0d12]">
+            {/* Top window controls and action buttons */}
+            <View
+              className={clsx(
+                'w-full flex-row items-center justify-between pt-3 pb-1',
+                collapsed ? 'px-1 flex-col gap-1' : 'px-3',
+              )}
+            >
+              {!collapsed ? (
+                <View className="flex-row items-center gap-2">
+                  <View className="h-3 w-3 rounded-full bg-[#ff5f56]" />
+                  <View className="h-3 w-3 rounded-full bg-[#ffbd2e]" />
+                  <View className="h-3 w-3 rounded-full bg-[#27c93f]" />
+                </View>
+              ) : null}
+              <View className={clsx('items-center gap-1', collapsed ? 'flex-col' : 'flex-row')}>
+                <Tooltip title={t('buttons.toggleSidebar') || 'Toggle Sidebar'}>
+                  <button
+                    type="button"
+                    title={t('buttons.toggleSidebar') || 'Toggle Sidebar'}
+                    className="h-7 w-7 flex items-center justify-center rounded-lg hover:bg-white/10 transition-colors bg-transparent border-0 p-0 cursor-pointer outline-none"
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      settings$.sidebarCollapsed.set(!settings$.sidebarCollapsed.get())
+                    }}
+                  >
+                    <MaterialIcons name="vertical-split" size={17} color="#94a3b8" />
+                  </button>
+                </Tooltip>
+                <Tooltip title={t('buttons.restoreTabs') || 'Recently Closed Tabs'}>
+                  <NouMenu
+                    trigger={
+                      <button
+                        type="button"
+                        title={t('buttons.restoreTabs') || 'Recently Closed Tabs'}
+                        className="h-7 w-7 flex items-center justify-center rounded-lg hover:bg-white/10 transition-colors bg-transparent border-0 p-0 cursor-pointer outline-none"
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onMouseDown={(e) => e.stopPropagation()}
+                      >
+                        <MaterialIcons name="history" size={18} color="#94a3b8" />
+                      </button>
+                    }
+                    items={restoreMenuItems}
+                  />
+                </Tooltip>
+                <Tooltip title={t('tabs.new') || 'New Tab'}>
+                  <button
+                    type="button"
+                    title={t('tabs.new') || 'New Tab'}
+                    className="h-7 w-7 flex items-center justify-center rounded-lg hover:bg-white/10 transition-colors bg-transparent border-0 p-0 cursor-pointer outline-none"
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      openTabInDesktopGroup(null, '')
+                    }}
+                  >
+                    <MaterialIcons name="add" size={18} color="#94a3b8" />
+                  </button>
+                </Tooltip>
+              </View>
+            </View>
+
             <ScrollView
               className="flex-1"
               contentContainerClassName={
                 collapsed
-                  ? 'min-h-full gap-2 items-center overflow-visible px-1 pb-2 pt-1'
-                  : 'min-h-full gap-3 overflow-visible px-2 pb-3 pt-1'
+                  ? 'gap-1 items-center overflow-visible px-1 pb-2 pt-1'
+                  : 'gap-1.5 overflow-visible px-2 pb-3 pt-1'
               }
             >
-              <SectionDropTarget groupId={null}>
-                {/* The wrapper is only as tall as the list, so the sticky row below sits
-                    right under the last tab and rides the bottom edge only once the list
-                    is long enough to scroll. */}
-                <div>
-                  {list}
-                  <div className="sticky bottom-0 bg-zinc-100 pt-1 dark:bg-zinc-900">{newTabButton}</div>
-                </div>
-              </SectionDropTarget>
+              {/* Workspace Sections */}
+              <SidebarSections
+                collapsed={collapsed}
+                workspaceContent={
+                  <SectionDropTarget groupId={null}>
+                    <div className="pt-0.5">{list}</div>
+                  </SectionDropTarget>
+                }
+              />
             </ScrollView>
           </View>
         </div>

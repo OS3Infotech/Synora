@@ -194,7 +194,6 @@ class NoraStandaloneActivity : Activity() {
 
   private fun configureWebView() {
     registerForContextMenu(webView)
-    installGoogleOAuthShim(webView)
     webView.webViewClient = object : WebViewClient() {
       override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
         pageUrl = url

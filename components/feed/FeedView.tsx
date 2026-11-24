@@ -42,7 +42,7 @@ import { confirmDestructiveAction } from '@/lib/confirm'
 import { useTwColor } from '@/lib/theme'
 import { share } from '@/lib/share'
 import { ensurePostMedia, keptMediaUri, mediaSaveFailedMessage, saveWatchPostMedia, savesToDownloads, showMediaSavedToast, watchMedia$ } from '@/lib/watch-media'
-import { feedTabActions, feedTabUrl } from '@/lib/feed-tab'
+import { feedTabActions, feedTabUrl, getFeedTimelineId, isFeedTabUrl, SOCIAL_FEED_TIMELINE_ID, SOCIAL_FEED_SITES } from '@/lib/feed-tab'
 import { openFeedTab } from '@/lib/page'
 
 // Enough chips to reach the sources most likely wanted; the rest are found in the list of them all.
@@ -596,7 +596,12 @@ export const FeedView: React.FC<{
   }, [tabId, refresh])
 
   // Not memoized: the store changes its arrays in place, so they keep their identity across changes.
-  const profiles = timeline ? allProfiles.filter((profile) => profile.timelineId === timeline.id) : allProfiles
+  // Social Feed isolates social-platform profiles; the main Feed isolates AI communities & research.
+  const isSocialFeed = timelineId === SOCIAL_FEED_TIMELINE_ID
+  const baseProfiles = timeline ? allProfiles.filter((profile) => profile.timelineId === timeline.id) : allProfiles
+  const profiles = isSocialFeed
+    ? allProfiles.filter((p) => SOCIAL_FEED_SITES.has(p.site))
+    : baseProfiles.filter((p) => !SOCIAL_FEED_SITES.has(p.site))
   const profileByKey = new Map(allProfiles.map((profile) => [profile.key, profile]))
   const availableSites = useMemo(
     () => [...new Set(profiles.map((p) => p.site))].sort((a, b) => watchSiteLabels[a].localeCompare(watchSiteLabels[b])),
@@ -690,7 +695,7 @@ export const FeedView: React.FC<{
   const loggedOutSites = getLoggedOutSites(profiles, useAccounts)
   // Closed for the sites it told of, it is told again only of another one.
   const loginHintDismissedSites = useValue(watch$.loginHintDismissedSites)
-  const showLoginHint = loggedOutSites.some((site) => !loginHintDismissedSites.includes(site))
+  const showLoginHint = isSocialFeed && loggedOutSites.some((site) => !loginHintDismissedSites.includes(site))
   const dismissLoginHint = () =>
     watch$.loginHintDismissedSites.set(Array.from(new Set([...loginHintDismissedSites, ...loggedOutSites])))
   // Imginn's check stopped it, or a source it left unread, as before Nora was last closed: told
@@ -750,39 +755,50 @@ export const FeedView: React.FC<{
   }, [managingSources])
 
   const timelineMenuItems = [
-    {
-      label: isIos ? `${feedEmoji} ${t('feed.allSources')}` : t('feed.allSources'),
-      icon: emojiIcon(feedEmoji),
-      systemImage: timeline ? undefined : 'checkmark',
-      metaLabel: metaOf(!timeline, unreadLabel()),
-      handler: () => showTimeline(),
-    },
-    ...timelines.map((current) => {
-      const emoji = current.emoji || DEFAULT_TIMELINE_EMOJI
-      return {
-        label: isIos ? `${emoji} ${current.name}` : current.name,
-        icon: emojiIcon(emoji),
-        systemImage: current.id === timeline?.id ? 'checkmark' : undefined,
-        metaLabel: metaOf(current.id === timeline?.id, unreadLabel(current.id)),
-        handler: () => showTimeline(current.id),
-      }
-    }),
-    { label: '', handler: () => {}, kind: 'separator' as const },
-    {
-      label: t('feed.loadDefaultCommunities'),
-      icon: <NouText style={{ fontSize: 15, lineHeight: 20 }}>⚡</NouText>,
-      systemImage: 'sparkles',
-      handler: () => {
-        const created = seedDefaultCommunities(watch$)
-        if (created.length > 0) void refresh('manual')
-      },
-    },
-    {
-      label: t('feed.addSources'),
-      icon: <MaterialIcons name="add-link" size={18} color={iconColor} />,
-      systemImage: 'link.badge.plus',
-      handler: () => openFeedOverlay('addSourcesModal', { tabId, timelineId: timeline?.id }),
-    },
+    ...(isSocialFeed
+      ? [
+          {
+            label: 'Add Social Sources',
+            icon: <MaterialIcons name="add-link" size={18} color={iconColor} />,
+            systemImage: 'link.badge.plus',
+            handler: () => openFeedOverlay('addSourcesModal', { tabId, timelineId: SOCIAL_FEED_TIMELINE_ID }),
+          },
+        ]
+      : [
+          {
+            label: isIos ? `${feedEmoji} ${t('feed.allSources')}` : t('feed.allSources'),
+            icon: emojiIcon(feedEmoji),
+            systemImage: timeline ? undefined : 'checkmark',
+            metaLabel: metaOf(!timeline, unreadLabel()),
+            handler: () => showTimeline(),
+          },
+          ...timelines.map((current) => {
+            const emoji = current.emoji || DEFAULT_TIMELINE_EMOJI
+            return {
+              label: isIos ? `${emoji} ${current.name}` : current.name,
+              icon: emojiIcon(emoji),
+              systemImage: current.id === timeline?.id ? 'checkmark' : undefined,
+              metaLabel: metaOf(current.id === timeline?.id, unreadLabel(current.id)),
+              handler: () => showTimeline(current.id),
+            }
+          }),
+          { label: '', handler: () => {}, kind: 'separator' as const },
+          {
+            label: t('feed.loadDefaultCommunities'),
+            icon: <NouText style={{ fontSize: 15, lineHeight: 20 }}>⚡</NouText>,
+            systemImage: 'sparkles',
+            handler: () => {
+              const created = seedDefaultCommunities(watch$)
+              if (created.length > 0) void refresh('manual')
+            },
+          },
+          {
+            label: t('feed.addSources'),
+            icon: <MaterialIcons name="add-link" size={18} color={iconColor} />,
+            systemImage: 'link.badge.plus',
+            handler: () => openFeedOverlay('addSourcesModal', { tabId, timelineId: timeline?.id }),
+          },
+        ]),
     ...(timeline
       ? [
           {
@@ -893,7 +909,81 @@ export const FeedView: React.FC<{
 
   const header = (
     <View style={isWeb ? undefined : { paddingTop: headHeight }}>
-      {(timelines.length > 0 || allProfiles.length > 0) ? (
+      {isSocialFeed ? (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerClassName="gap-1.5 px-4 pb-2.5 items-center"
+        >
+          <Pressable
+            hitSlop={androidHitSlop}
+            style={iosTouchTarget}
+            onPress={() => onSelectSite(null)}
+            className={clsx(
+              'h-8 flex-row items-center gap-1.5 rounded-full px-3',
+              selectedSite === null
+                ? 'bg-zinc-900 dark:bg-white'
+                : 'border border-zinc-200 bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-800/60',
+            )}
+          >
+            <NouText
+              className={clsx(
+                'text-xs font-semibold',
+                selectedSite === null ? 'text-white dark:text-zinc-900' : 'text-zinc-600 dark:text-zinc-400',
+              )}
+            >
+              All Social
+            </NouText>
+          </Pressable>
+          {(availableSites.length > 0 ? availableSites : (['instagram', 'x', 'facebook'] as WatchSite[])).map((site) => {
+            const active = selectedSite === site
+            return (
+              <Pressable
+                key={site}
+                hitSlop={androidHitSlop}
+                style={iosTouchTarget}
+                onPress={() => {
+                  const nextSite = active ? null : site
+                  onSelectSite(nextSite)
+                  if (!active) {
+                    const hasSources = siteProfiles.some((p) => p.site === site)
+                    if (!hasSources) {
+                      openFeedOverlay('addSourcesModal', { tabId, timelineId: SOCIAL_FEED_TIMELINE_ID })
+                    }
+                  }
+                }}
+                className={clsx(
+                  'h-8 flex-row items-center gap-1.5 rounded-full px-3',
+                  active
+                    ? 'bg-pink-600 dark:bg-pink-500'
+                    : 'border border-zinc-200 bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-800/60',
+                )}
+              >
+                <View style={{ transform: [{ scale: 16 / SERVICE_ICON_SIZE }] }}>{siteIcon(site)}</View>
+                <NouText
+                  className={clsx(
+                    'text-xs font-medium',
+                    active ? 'font-semibold text-white' : 'text-zinc-700 dark:text-zinc-300',
+                  )}
+                >
+                  {watchSiteLabels[site]}
+                </NouText>
+              </Pressable>
+            )
+          })}
+          <Pressable
+            hitSlop={androidHitSlop}
+            style={iosTouchTarget}
+            onPress={() => openFeedOverlay('addSourcesModal', { tabId, timelineId: SOCIAL_FEED_TIMELINE_ID })}
+            className="h-8 flex-row items-center gap-1 rounded-full border border-dashed border-zinc-300 dark:border-zinc-700 px-2.5 bg-zinc-50 dark:bg-zinc-900/60"
+          >
+            <MaterialIcons name="add" size={15} color={iconColor} />
+            <NouText className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
+              Add Source
+            </NouText>
+          </Pressable>
+        </ScrollView>
+      ) : (timelines.length > 0 || allProfiles.length > 0) ? (
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -962,7 +1052,7 @@ export const FeedView: React.FC<{
         </ScrollView>
       ) : null}
 
-      {availableSites.length > 1 ? (
+      {!isSocialFeed && availableSites.length > 1 ? (
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -995,7 +1085,16 @@ export const FeedView: React.FC<{
                 key={site}
                 hitSlop={androidHitSlop}
                 style={iosTouchTarget}
-                onPress={() => onSelectSite(active ? null : site)}
+                onPress={() => {
+                  const nextSite = active ? null : site
+                  onSelectSite(nextSite)
+                  if (!active) {
+                    const hasSources = siteProfiles.some((p) => p.site === site)
+                    if (!hasSources) {
+                      openFeedOverlay('addSourcesModal', { tabId, timelineId: SOCIAL_FEED_TIMELINE_ID })
+                    }
+                  }
+                }}
                 className={clsx(
                   'h-8 flex-row items-center gap-1.5 rounded-full px-3',
                   active
@@ -1007,7 +1106,7 @@ export const FeedView: React.FC<{
                 <NouText
                   className={clsx(
                     'text-xs font-medium',
-                    active ? 'font-semibold text-white' : 'text-zinc-700 dark:text-zinc-300',
+                    active ? 'font-semibold text-white dark:text-zinc-900' : 'text-zinc-700 dark:text-zinc-300',
                   )}
                 >
                   {watchSiteLabels[site]}
@@ -1216,45 +1315,62 @@ export const FeedView: React.FC<{
 
   const noSources = !profiles.length && !(timeline && allProfiles.length)
   const empty = noSources ? (
-    <View className="items-center px-8 py-12">
-      <NouText style={{ fontSize: 40, lineHeight: 48 }}>⚡</NouText>
-      <NouText className="mt-3 text-center text-xl font-bold">Synora</NouText>
-      <NouText className="mt-1 max-w-sm text-center text-sm text-zinc-600 dark:text-zinc-400">
-        {t('feed.loadDefaultCommunitiesHint')}
-      </NouText>
-      <Pressable
-        onPress={() => {
-          const created = seedDefaultCommunities(watch$)
-          if (created.length > 0) void refresh('manual')
-        }}
-        accessibilityRole="button"
-        style={iosTouchTarget}
-        className="mt-6 h-11 flex-row items-center gap-2 rounded-full bg-indigo-600 px-6 shadow-sm"
-      >
-        <NouText className="text-base">⚡</NouText>
-        <NouText className="font-semibold text-white">{t('feed.loadDefaultCommunities')}</NouText>
-      </Pressable>
-      <Pressable
-        onPress={() => openFeedOverlay('timelineModal', { tabId })}
-        accessibilityRole="button"
-        style={iosTouchTarget}
-        className="mt-3 h-10 flex-row items-center gap-2 rounded-full border border-dashed border-zinc-400 dark:border-zinc-600 px-5"
-      >
-        <MaterialIcons name="add" size={18} color={iconColor} />
-        <NouText className="text-sm font-medium text-zinc-700 dark:text-zinc-300">{t('feed.newTimeline')}</NouText>
-      </Pressable>
-      <Pressable
-        onPress={() => openFeedOverlay('addSourcesModal', { tabId, timelineId: timeline?.id })}
-        accessibilityRole="button"
-        style={iosTouchTarget}
-        className="mt-2.5 h-10 flex-row items-center gap-2 rounded-full border border-zinc-300 dark:border-zinc-700 px-5"
-      >
-        <MaterialIcons name="add-link" size={18} color={iconColor} />
-        <NouText className="text-sm font-medium text-zinc-700 dark:text-zinc-300">{t('feed.addSources')}</NouText>
-      </Pressable>
-      <WatchSites className="mt-6" />
-      <NouText className="mt-4 text-center text-xs text-zinc-500 dark:text-zinc-400">{t('feed.emptyWatchHint')}</NouText>
-    </View>
+    isSocialFeed ? (
+      <View className="items-center px-8 py-12">
+        <View className="h-16 w-16 items-center justify-center rounded-3xl bg-pink-500/10 dark:bg-pink-500/20 mb-2">
+          <MaterialIcons name="people" size={36} color="#ec4899" />
+        </View>
+        <NouText className="mt-2 text-center text-xl font-bold">Social Feed</NouText>
+        <NouText className="mt-1 max-w-sm text-center text-sm text-zinc-600 dark:text-zinc-400">
+          Follow your favorite creators and profiles from Instagram, X (Twitter), Facebook, TikTok, and more.
+        </NouText>
+        <Pressable
+          onPress={() => openFeedOverlay('addSourcesModal', { tabId, timelineId: SOCIAL_FEED_TIMELINE_ID })}
+          accessibilityRole="button"
+          style={iosTouchTarget}
+          className="mt-6 h-11 flex-row items-center gap-2 rounded-full bg-pink-600 px-6 shadow-sm hover:bg-pink-700 transition-colors"
+        >
+          <MaterialIcons name="add-link" size={20} color="#ffffff" />
+          <NouText className="font-semibold text-white">Add Social Sources</NouText>
+        </Pressable>
+        <WatchSites
+          className="mt-6"
+          sites={['instagram', 'x', 'facebook', 'tiktok', 'threads', 'bluesky']}
+        />
+        <NouText className="mt-4 text-center text-xs text-zinc-500 dark:text-zinc-400">
+          Paste any Instagram, X, or Facebook profile link to start watching their updates.
+        </NouText>
+      </View>
+    ) : (
+      <View className="items-center px-8 py-12">
+        <NouText style={{ fontSize: 40, lineHeight: 48 }}>⚡</NouText>
+        <NouText className="mt-3 text-center text-xl font-bold">AI Communities</NouText>
+        <NouText className="mt-1 max-w-sm text-center text-sm text-zinc-600 dark:text-zinc-400">
+          Explore the latest breakthroughs in Open-Source LLMs, Frontier Research, and AI Agents.
+        </NouText>
+        <Pressable
+          onPress={() => {
+            const created = seedDefaultCommunities(watch$)
+            if (created.length > 0) void refresh('manual')
+          }}
+          accessibilityRole="button"
+          style={iosTouchTarget}
+          className="mt-6 h-11 flex-row items-center gap-2 rounded-full bg-indigo-600 px-6 shadow-sm hover:bg-indigo-700 transition-colors"
+        >
+          <NouText className="text-base">⚡</NouText>
+          <NouText className="font-semibold text-white">{t('feed.loadDefaultCommunities')}</NouText>
+        </Pressable>
+        <Pressable
+          onPress={() => openFeedOverlay('addSourcesModal', { tabId, timelineId: timeline?.id })}
+          accessibilityRole="button"
+          style={iosTouchTarget}
+          className="mt-3 h-10 flex-row items-center gap-2 rounded-full border border-zinc-300 dark:border-zinc-700 px-5"
+        >
+          <MaterialIcons name="add-link" size={18} color={iconColor} />
+          <NouText className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Add AI Source</NouText>
+        </Pressable>
+      </View>
+    )
   ) : (
     <View className="items-center px-8 py-16">
       <NouText style={{ fontSize: 40, lineHeight: 48 }}>{timelineEmoji(timeline?.id)}</NouText>
@@ -1281,6 +1397,14 @@ export const FeedView: React.FC<{
         ) : (
           <>
             <EmptyAction primary icon="refresh" label={t('feed.refresh')} onPress={() => void refresh('manual')} />
+            {isSocialFeed ? (
+              <EmptyAction
+                icon="add-link"
+                label="Add Social Sources"
+                onPress={() => openFeedOverlay('addSourcesModal', { tabId, timelineId: SOCIAL_FEED_TIMELINE_ID })}
+                color={iconColor}
+              />
+            ) : null}
             {mediaOnly ? (
               <EmptyAction
                 icon="photo-library"

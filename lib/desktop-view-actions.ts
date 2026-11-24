@@ -9,35 +9,40 @@ import {
 import { getGroupedTabIds } from '@/lib/tab-groups'
 import { tabGroups$ } from '@/states/tab-groups'
 import { getOrderedTabIds, openDesktopTab, tabs$ } from '@/states/tabs'
+import { settings$ } from '@/states/settings'
 
 // Opens a tab in a specific view: a split view fills its first free slot and grows a new
 // one when it is full, any other view just takes the tab, and a null group means the
 // ungrouped section. Also the path for a URL dropped on a view.
-export const openTabInDesktopGroup = (groupId: string | null, url = '') => {
-  const group = groupId ? tabGroups$.groups.get().find((currentGroup) => currentGroup.id === groupId) : null
-  const tabId = openDesktopTab(url)
-  if (!tabId) {
-    return undefined
-  }
-
-  tabGroups$.setActiveGroup(group?.id ?? null)
-  if (group) {
-    if (group.layout === 'split-view') {
-      const emptySlotIndex = group.tabIds.findIndex((slotTabId) => !slotTabId)
-      if (emptySlotIndex >= 0) {
-        tabGroups$.assignGroupSlot(group.id, emptySlotIndex, tabId)
-      } else {
-        const newSlotIndex = group.tabIds.length
-        tabGroups$.appendSplitGroupSlot(group.id)
-        tabGroups$.assignGroupSlot(group.id, newSlotIndex, tabId)
-      }
-    } else {
-      tabGroups$.moveTabToGroup(tabId, group.id)
+export const openTabInDesktopGroup = (groupId: string | null, url = '', options?: any) => {
+  return batch(() => {
+    const group = groupId ? tabGroups$.groups.get().find((currentGroup) => currentGroup.id === groupId) : null
+    const currentProfile = settings$.selectedProfileId.get()
+    const effectiveProfile = options?.profile || (currentProfile && currentProfile !== 'all' ? currentProfile : 'default')
+    const tabId = openDesktopTab(url, { profile: effectiveProfile, profileMode: 'manual', ...options })
+    if (!tabId) {
+      return undefined
     }
-  }
 
-  tabs$.setActiveTabById(tabId, 'open')
-  return tabId
+    tabGroups$.setActiveGroup(group?.id ?? null)
+    if (group) {
+      if (group.layout === 'split-view') {
+        const emptySlotIndex = group.tabIds.findIndex((slotTabId) => !slotTabId)
+        if (emptySlotIndex >= 0) {
+          tabGroups$.assignGroupSlot(group.id, emptySlotIndex, tabId)
+        } else {
+          const newSlotIndex = group.tabIds.length
+          tabGroups$.appendSplitGroupSlot(group.id)
+          tabGroups$.assignGroupSlot(group.id, newSlotIndex, tabId)
+        }
+      } else {
+        tabGroups$.moveTabToGroup(tabId, group.id)
+      }
+    }
+
+    tabs$.setActiveTabById(tabId, 'open')
+    return tabId
+  })
 }
 
 // A URL dropped on a tab -- on its page, on its header, or on its row in the sidebar --

@@ -44,6 +44,9 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.webkit.WebResourceError
+import android.webkit.SslErrorHandler
+import android.net.http.SslError
 import android.widget.FrameLayout
 import android.widget.Toast
 import androidx.core.app.NotificationCompat
@@ -204,6 +207,48 @@ fun desktopFacebookUrl(url: String): String {
   return url.replaceFirst("https://m.facebook.com", "https://www.facebook.com")
 }
 
+fun isFacebookAuthOrSecurityUrl(url: String): Boolean {
+  val (host, path, query) = runCatching {
+    val uri = java.net.URI(url)
+    Triple(uri.host?.lowercase().orEmpty(), uri.path?.lowercase().orEmpty(), uri.query?.lowercase().orEmpty())
+  }.getOrElse {
+    val androidUri = runCatching { Uri.parse(url) }.getOrNull()
+    Triple(androidUri?.host?.lowercase().orEmpty(), androidUri?.path?.lowercase().orEmpty(), androidUri?.query?.lowercase().orEmpty())
+  }
+  if (!host.endsWith("facebook.com") && host != "fb.com") {
+    return false
+  }
+
+  // Login endpoints
+  if (path == "/login" || path.startsWith("/login/") || path == "/login.php") {
+    return true
+  }
+  // OAuth dialogs and authorization
+  if (path.contains("/dialog/oauth") || path == "/oauth" || path.startsWith("/oauth/")) {
+    return true
+  }
+  if (query.contains("client_id") || (query.contains("redirect_uri") && query.contains("response_type"))) {
+    return true
+  }
+  // Checkpoints and account integrity challenges
+  if (path == "/checkpoint" || path.startsWith("/checkpoint/")) {
+    return true
+  }
+  // Two-factor authentication & step verification
+  if (path.contains("two_step_verification") || path.contains("two_factor") || path.contains("/2fa")) {
+    return true
+  }
+  // Security, recovery, auth verification
+  if (path == "/security" || path.startsWith("/security/") ||
+      path == "/recover" || path.startsWith("/recover/") ||
+      path == "/auth" || path.startsWith("/auth/") ||
+      path == "/identity" || path.startsWith("/identity/")) {
+    return true
+  }
+
+  return false
+}
+
 fun shouldRedirectFacebookToMobile(currentUrl: String, targetUrl: String, desktopMode: Boolean): Boolean {
   if (desktopMode) {
     return false
@@ -217,7 +262,37 @@ fun shouldRedirectFacebookToMobile(currentUrl: String, targetUrl: String, deskto
   if (isMessengerUrl(currentUrl)) {
     return false
   }
+  if (isFacebookAuthOrSecurityUrl(targetUrl) || isFacebookAuthOrSecurityUrl(currentUrl)) {
+    return false
+  }
   return true
+}
+
+fun sanitizeUrlForLogging(url: String?): String {
+  if (url.isNullOrBlank()) return ""
+  return runCatching {
+    val uri = Uri.parse(url)
+    val scheme = uri.scheme ?: "https"
+    val host = uri.host ?: ""
+    val path = uri.path ?: ""
+    val queryNames = uri.queryParameterNames
+    val sanitizedQuery = if (queryNames != null && queryNames.isNotEmpty()) {
+      queryNames.joinToString("&") { param ->
+        val lower = param.lowercase()
+        if (lower.contains("pass") || lower.contains("token") || lower.contains("secret") ||
+            lower.contains("code") || lower.contains("cookie") || lower.contains("auth") ||
+            lower.contains("credential") || lower.contains("state") || lower.contains("ticket") ||
+            lower.contains("session") || lower.contains("key")) {
+          "$param=[REDACTED]"
+        } else {
+          val v = uri.getQueryParameter(param)
+          "$param=$v"
+        }
+      }
+    } else null
+    val base = "$scheme://$host$path"
+    if (sanitizedQuery != null) "$base?$sanitizedQuery" else base
+  }.getOrElse { "[sanitization-error]" }
 }
 
 val INTERNAL_SCHEMES = setOf("about", "blob", "data", "file", "http", "https", "javascript", "nora")
@@ -281,35 +356,71 @@ fun normalizeFileName(
   return if (ext == "") "$name.$replacement" else name.dropLast(ext.length) + replacement
 }
 
-// Hosts where Google runs WebView-detection for OAuth.
-val GOOGLE_AUTH_HOSTS = setOf("accounts.google.com", "accounts.youtube.com")
-val GOOGLE_AUTH_ORIGIN_RULES = GOOGLE_AUTH_HOSTS.map { "https://$it" }.toSet()
-
 fun isGoogleOAuthPopupUrl(url: String): Boolean {
-  val host = Uri.parse(url).host?.lowercase() ?: return false
-  return host in GOOGLE_AUTH_HOSTS
-}
-
-// Masks WebView-only fingerprints that Google's sign-in checks.
-val OAUTH_SHIM_SCRIPT = """
-  (function() {
-    try {
-      Object.defineProperty(navigator, 'webdriver', { get: function() { return undefined; }, configurable: true });
-    } catch (e) {}
-    try {
-      if (!window.chrome) { window.chrome = {}; }
-      if (!window.chrome.runtime) { window.chrome.runtime = {}; }
-      if (!window.chrome.app) { window.chrome.app = { isInstalled: false }; }
-      if (!window.chrome.csi) { window.chrome.csi = function() { return {}; }; }
-      if (!window.chrome.loadTimes) { window.chrome.loadTimes = function() { return {}; }; }
-    } catch (e) {}
-  })();
-""".trimIndent()
-
-fun installGoogleOAuthShim(webView: WebView) {
-  if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
-    WebViewCompat.addDocumentStartJavaScript(webView, OAUTH_SHIM_SCRIPT, GOOGLE_AUTH_ORIGIN_RULES)
+  val (host, path, query) = runCatching {
+    val uri = java.net.URI(url)
+    Triple(uri.host?.lowercase().orEmpty(), uri.path?.lowercase().orEmpty(), uri.query?.lowercase().orEmpty())
+  }.getOrElse {
+    val androidUri = runCatching { Uri.parse(url) }.getOrNull()
+    Triple(androidUri?.host?.lowercase().orEmpty(), androidUri?.path?.lowercase().orEmpty(), androidUri?.query?.lowercase().orEmpty())
   }
+  if (host.isEmpty()) return false
+
+  if (host == "accounts.google.com" || host.startsWith("accounts.google.") || host == "accounts.youtube.com" || host.startsWith("accounts.youtube.")) {
+    return true
+  }
+  if (host.contains("linkedin.com") && (path.contains("connect/google") || path.contains("oauth") || query.contains("google"))) {
+    return true
+  }
+  if ((host.contains("twitter.com") || host.contains("x.com")) && (path.contains("/i/flow") || path.contains("oauth") || query.contains("google"))) {
+    return true
+  }
+  if (host == "appleid.apple.com") {
+    return true
+  }
+
+  // Facebook / Meta login and OAuth flows (including "Log in with Facebook" on Instagram or other sites)
+  if (host.endsWith("facebook.com") || host == "facebook.com" || host.endsWith("fb.com") || host == "fb.com") {
+    if (
+      path.contains("/dialog/oauth") ||
+      path.contains("/login") ||
+      path.contains("/oauth") ||
+      path.contains("/plugins/login") ||
+      path.contains("/checkpoint") ||
+      path.contains("two_step_verification") ||
+      path.contains("two_factor") ||
+      query.contains("client_id") ||
+      query.contains("redirect_uri") ||
+      query.contains("app_id")
+    ) {
+      return true
+    }
+  }
+
+  // Instagram OAuth and account sign-in popup flows
+  if (host.endsWith("instagram.com") || host == "instagram.com") {
+    if (
+      path.contains("/accounts/login") ||
+      path.contains("/accounts/emailsignup") ||
+      path.contains("/oauth") ||
+      path.contains("/login") ||
+      query.contains("client_id") ||
+      query.contains("redirect_uri")
+    ) {
+      return true
+    }
+  }
+
+  // General OAuth 2.0 / OpenID Connect authorization popups
+  if (
+    (query.contains("client_id=") && (query.contains("redirect_uri=") || query.contains("response_type="))) ||
+    path.contains("/oauth/authorize") ||
+    path.contains("/oauth2/authorize")
+  ) {
+    return true
+  }
+
+  return false
 }
 
 /**
@@ -342,7 +453,10 @@ fun shouldOpenInSystemBrowser(uri: Uri): Boolean {
   val normalizedHost = host?.lowercase()
   val dynamicInternalHosts = nouController.settings.internalHosts.map { it.lowercase() }.toSet()
   val isFacebookHost = normalizedHost?.endsWith(".facebook.com") == true && normalizedHost != "l.facebook.com"
-  return !(host in VIEW_HOSTS || (normalizedHost != null && normalizedHost in dynamicInternalHosts) || isFacebookHost)
+  val isGoogleHost = normalizedHost?.let {
+    it.contains("google.com") || it.contains("gstatic.com") || it.contains("recaptcha.net") || it.contains("googleusercontent.com")
+  } == true
+  return !(host in VIEW_HOSTS || (normalizedHost != null && normalizedHost in dynamicInternalHosts) || isFacebookHost || isGoogleHost)
 }
 
 fun openInSystemBrowser(context: Context, uri: Uri): Boolean {
@@ -888,14 +1002,17 @@ class NoraView(context: Context, appContext: AppContext) : ExpoView(context, app
         object : WebViewClient() {
           override fun doUpdateVisitedHistory(view: WebView, url: String, isReload: Boolean) {
             if (nouController.settings.redirectToOldReddit && url.startsWith("https://www.reddit.com/")) {
+              log("Redirect: old.reddit.com for ${sanitizeUrlForLogging(url)}")
               load(url.replace("www.reddit.com", "old.reddit.com"))
               return
             }
             if (isDesktopFacebookUrl(url) && (Uri.parse(url).host == "m.facebook.com" || view.settings.userAgentString != uaLinux)) {
+              log("Redirect: Facebook mobile -> desktop for ${sanitizeUrlForLogging(url)}")
               load(desktopFacebookUrl(url))
               return
             }
             if (shouldRedirectFacebookToMobile(pageUrl, url, userAgent?.contains(" Mobile ") == false)) {
+              log("Redirect: Facebook desktop -> mobile for ${sanitizeUrlForLogging(url)}")
               load(url.replace("www", "m"))
               return
             }
@@ -915,9 +1032,6 @@ class NoraView(context: Context, appContext: AppContext) : ExpoView(context, app
           override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
             pageUrl = url
             scrolledRegions = emptyList()
-            if (Uri.parse(url).host in GOOGLE_AUTH_HOSTS) {
-              evaluateJavascript(OAUTH_SHIM_SCRIPT, null)
-            }
             // Only a fallback: when the WebView supports document start scripts the
             // guard is already installed before any page script has run.
             if (documentStartScriptHandler == null) {
@@ -946,23 +1060,28 @@ class NoraView(context: Context, appContext: AppContext) : ExpoView(context, app
            */
           private fun overrideUrlLoading(view: WebView, url: String, allowInApp: Boolean, followed: Boolean = true): Boolean {
             if (url.startsWith("http://") && !nouController.settings.allowHttpWebsite) {
+              log("HTTP website blocked: ${sanitizeUrlForLogging(url)}")
               showHttpBlockedPage(url)
               return true
             }
             if (nouController.settings.redirectToOldReddit && url.startsWith("https://www.reddit.com/")) {
+              log("Redirect: old.reddit.com for ${sanitizeUrlForLogging(url)}")
               load(url.replace("www.reddit.com", "old.reddit.com"))
               return true
             }
             val redirectedUrl = redirectFacebookUrl(url)
             if (redirectedUrl != null && !pageUrl.startsWith(redirectedUrl)) {
+              log("Redirect: Facebook app scheme -> web for ${sanitizeUrlForLogging(redirectedUrl)}")
               load(redirectedUrl)
               return true
             }
             if (isDesktopFacebookUrl(url) && (Uri.parse(url).host == "m.facebook.com" || view.settings.userAgentString != uaLinux)) {
+              log("Redirect: Facebook mobile -> desktop for ${sanitizeUrlForLogging(url)}")
               load(desktopFacebookUrl(url))
               return true
             }
             if (shouldRedirectFacebookToMobile(pageUrl, url, userAgent?.contains(" Mobile ") == false)) {
+              log("Redirect: Facebook desktop -> mobile for ${sanitizeUrlForLogging(url)}")
               load(url.replace("www", "m"))
               return true
             }
@@ -979,6 +1098,27 @@ class NoraView(context: Context, appContext: AppContext) : ExpoView(context, app
             // a tap. Without the anonymous mode an app link is handled as it always was.
             val allowInApp = request.isForMainFrame && request.hasGesture() && openAppLinksInTab
             return overrideUrlLoading(view, request.url.toString(), allowInApp, request.hasGesture())
+          }
+
+          override fun onReceivedError(view: WebView, errorCode: Int, description: String?, failingUrl: String?) {
+            log("Navigation error: code=$errorCode, desc=$description, url=${sanitizeUrlForLogging(failingUrl)}")
+          }
+
+          override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
+            if (request.isForMainFrame) {
+              log("Navigation error: code=${error.errorCode}, desc=${error.description}, url=${sanitizeUrlForLogging(request.url.toString())}")
+            }
+          }
+
+          override fun onReceivedHttpError(view: WebView, request: WebResourceRequest, errorResponse: WebResourceResponse) {
+            if (request.isForMainFrame) {
+              log("HTTP error: statusCode=${errorResponse.statusCode}, reason=${errorResponse.reasonPhrase}, url=${sanitizeUrlForLogging(request.url.toString())}")
+            }
+          }
+
+          override fun onReceivedSslError(view: WebView, handler: SslErrorHandler, error: SslError) {
+            log("SSL error: primaryError=${error.primaryError}, url=${sanitizeUrlForLogging(error.url)}")
+            super.onReceivedSslError(view, handler, error)
           }
 
           override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
@@ -1098,6 +1238,7 @@ class NoraView(context: Context, appContext: AppContext) : ExpoView(context, app
           isUserGesture: Boolean,
           resultMsg: android.os.Message
         ): Boolean {
+          log("Popup [Requested]: isDialog=$isDialog, userGesture=$isUserGesture, openerUrl=${sanitizeUrlForLogging(pageUrl)}")
           val newWebView = NouWebView(view.getContext())
           if (profileName != "default" && WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE)) {
             try {
@@ -1106,7 +1247,6 @@ class NoraView(context: Context, appContext: AppContext) : ExpoView(context, app
               log("set popup profile failed: ${e.message}")
             }
           }
-          installGoogleOAuthShim(newWebView)
           // A popup starts out as its own realm the opener can run scripts in,
           // so it needs the guard as much as a tab does.
           installDocumentStartScript(newWebView)
@@ -1121,6 +1261,7 @@ class NoraView(context: Context, appContext: AppContext) : ExpoView(context, app
               return false
             }
             decided = true
+            log("Popup [SystemBrowser]: handing off popup to system browser: ${sanitizeUrlForLogging(url)}")
             popup.stopLoading()
             if (popupWebView === popup) dismissPopup() else destroyDetachedPopup(popup)
             openInSystemBrowser(popup.context, uri)
@@ -1129,30 +1270,36 @@ class NoraView(context: Context, appContext: AppContext) : ExpoView(context, app
 
           newWebView.webViewClient = object : WebViewClient() {
             override fun onPageStarted(popup: WebView, url: String, favicon: Bitmap?) {
-              if (Uri.parse(url).host in GOOGLE_AUTH_HOSTS) {
-                popup.evaluateJavascript(OAUTH_SHIM_SCRIPT, null)
-              }
               if (decided) return
               // about:blank is a transient placeholder; JS will navigate the popup
               // via window.opener. Attach as overlay so it stays alive, but defer the
               // commit until a real URL appears.
               if (url == "about:blank" || url.startsWith("about:")) {
+                log("Popup [Placeholder]: attached overlay for ${sanitizeUrlForLogging(url)}")
                 if (popupWebView !== popup) showPopup(popup)
                 return
               }
               if (handOffToSystemBrowser(popup, url)) return
               decided = true
               if (isGoogleOAuthPopupUrl(url)) {
+                log("Popup [OAuth]: permitted overlay OAuth popup for ${sanitizeUrlForLogging(url)}")
                 if (popupWebView !== popup) showPopup(popup)
               } else {
+                log("Popup [NewTab]: non-OAuth popup converted to new-tab: ${sanitizeUrlForLogging(url)}")
                 popup.stopLoading()
                 if (popupWebView === popup) dismissPopup() else destroyDetachedPopup(popup)
-                log("new-tab: $url")
                 emit("new-tab", mapOf("url" to url))
               }
             }
 
             override fun shouldOverrideUrlLoading(popup: WebView, url: String): Boolean {
+              val uri = Uri.parse(url)
+              if (uri.scheme?.lowercase() !in INTERNAL_SCHEMES) {
+                return handleExternalAppUrl(popup.context, url, null, false)
+              }
+              if (isGoogleOAuthPopupUrl(url)) {
+                return false
+              }
               return shouldNoraOverrideUrlLoading(popup, url)
             }
 
@@ -1161,10 +1308,32 @@ class NoraView(context: Context, appContext: AppContext) : ExpoView(context, app
               if (request.isForMainFrame && handOffToSystemBrowser(popup, url)) return true
               return shouldOverrideUrlLoading(popup, url)
             }
+
+            override fun onReceivedError(popup: WebView, errorCode: Int, description: String?, failingUrl: String?) {
+              log("Popup navigation error: code=$errorCode, desc=$description, url=${sanitizeUrlForLogging(failingUrl)}")
+            }
+
+            override fun onReceivedError(popup: WebView, request: WebResourceRequest, error: WebResourceError) {
+              if (request.isForMainFrame) {
+                log("Popup navigation error: code=${error.errorCode}, desc=${error.description}, url=${sanitizeUrlForLogging(request.url.toString())}")
+              }
+            }
+
+            override fun onReceivedHttpError(popup: WebView, request: WebResourceRequest, errorResponse: WebResourceResponse) {
+              if (request.isForMainFrame) {
+                log("Popup HTTP error: statusCode=${errorResponse.statusCode}, reason=${errorResponse.reasonPhrase}, url=${sanitizeUrlForLogging(request.url.toString())}")
+              }
+            }
+
+            override fun onReceivedSslError(popup: WebView, handler: SslErrorHandler, error: SslError) {
+              log("Popup SSL error: primaryError=${error.primaryError}, url=${sanitizeUrlForLogging(error.url)}")
+              super.onReceivedSslError(popup, handler, error)
+            }
           }
 
           newWebView.webChromeClient = object : WebChromeClient() {
             override fun onCloseWindow(window: WebView) {
+              log("Popup [Close]: closing window for popup")
               if (popupWebView === window) {
                 dismissPopup()
               }
@@ -1312,7 +1481,6 @@ class NoraView(context: Context, appContext: AppContext) : ExpoView(context, app
     activity?.registerForContextMenu(webView)
 
     webView.addJavascriptInterface(NouJsInterface(context, this), "NoraI")
-    installGoogleOAuthShim(webView)
     webView.setFindListener { active, total, isDone ->
       if (isDone) {
         emit("find-result", mapOf("active" to if (total > 0) active + 1 else 0, "total" to total))

@@ -20,13 +20,15 @@ import {
 let TaskManager: typeof import('expo-task-manager') | undefined
 let BackgroundTask: typeof import('expo-background-task') | undefined
 
-try {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  TaskManager = require('expo-task-manager')
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  BackgroundTask = require('expo-background-task')
-} catch (e) {
-  console.warn('Failed to load expo-task-manager or expo-background-task', e)
+if (typeof require !== 'undefined') {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    TaskManager = require('expo-task-manager')
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    BackgroundTask = require('expo-background-task')
+  } catch (e) {
+    console.warn('Failed to load expo-task-manager or expo-background-task', e)
+  }
 }
 
 export const isMentionNotificationsAvailable = Boolean(isNotificationsAvailable && TaskManager && BackgroundTask)

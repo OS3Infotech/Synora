@@ -3,9 +3,10 @@
   "productName": "Synora",
   "version": "1.0.0",
   "description": "Everything connected in one intelligent space. Premium, modern, brandable.",
+  "license": "AGPL-3.0-or-later",
   "main": "./out/main/index.js",
-  "author": "Nonbili Inc.",
-  "homepage": "https://github.com/nonbili/Nora",
+  "author": "OS3 Infotech",
+  "homepage": "https://github.com/OS3Infotech/Synora",
   "scripts": {
     "preinstall": "touch ../node_modules/nora",
     "format": "prettier --write .",

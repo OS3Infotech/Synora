@@ -23,6 +23,88 @@ func isDesktopFacebookUrl(_ url: URL) -> Bool {
   isMessengerUrl(url) || isMarketplaceUrl(url)
 }
 
+func isFacebookAuthOrSecurityUrl(_ url: URL) -> Bool {
+  guard let host = url.host?.lowercased() else { return false }
+  if !host.hasSuffix("facebook.com") && host != "fb.com" {
+    return false
+  }
+  let path = url.path.lowercased()
+  let query = url.query?.lowercased() ?? ""
+
+  // Login endpoints
+  if path == "/login" || path.hasPrefix("/login/") || path == "/login.php" {
+    return true
+  }
+  // OAuth dialogs and authorization
+  if path.contains("/dialog/oauth") || path == "/oauth" || path.hasPrefix("/oauth/") {
+    return true
+  }
+  if query.contains("client_id") || (query.contains("redirect_uri") && query.contains("response_type")) {
+    return true
+  }
+  // Checkpoints and account integrity challenges
+  if path == "/checkpoint" || path.hasPrefix("/checkpoint/") {
+    return true
+  }
+  // Two-factor authentication & step verification
+  if path.contains("two_step_verification") || path.contains("two_factor") || path.contains("/2fa") {
+    return true
+  }
+  // Security, recovery, auth verification
+  if path == "/security" || path.hasPrefix("/security/") ||
+     path == "/recover" || path.hasPrefix("/recover/") ||
+     path == "/auth" || path.hasPrefix("/auth/") ||
+     path == "/identity" || path.hasPrefix("/identity/") {
+    return true
+  }
+  return false
+}
+
+func shouldRedirectFacebookToMobile(currentUrl: URL?, targetUrl: URL, desktopMode: Bool) -> Bool {
+  if desktopMode {
+    return false
+  }
+  guard let host = targetUrl.host?.lowercased(), host == "www.facebook.com" else {
+    return false
+  }
+  if isDesktopFacebookUrl(targetUrl) {
+    return false
+  }
+  if let current = currentUrl, isMessengerUrl(current) {
+    return false
+  }
+  if isFacebookAuthOrSecurityUrl(targetUrl) || (currentUrl != nil && isFacebookAuthOrSecurityUrl(currentUrl!)) {
+    return false
+  }
+  return true
+}
+
+func sanitizeUrlForLogging(_ url: URL?) -> String {
+  guard let url = url else { return "" }
+  guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+    return url.host ?? url.scheme ?? "[malformed-url]"
+  }
+  if let items = components.queryItems, !items.isEmpty {
+    let sensitiveKeys: Set<String> = [
+      "code", "token", "access_token", "refresh_token", "state", "secret",
+      "password", "auth", "credential", "ticket", "session", "key"
+    ]
+    components.queryItems = items.map { item in
+      let lower = item.name.lowercased()
+      let isSensitive = sensitiveKeys.contains(lower) ||
+        lower.contains("token") || lower.contains("secret") || lower.contains("pass") ||
+        lower.contains("auth") || lower.contains("code")
+      return URLQueryItem(name: item.name, value: isSensitive ? "[REDACTED]" : item.value)
+    }
+  }
+  return components.string ?? "\(url.scheme ?? "https")://\(url.host ?? "")\(url.path)"
+}
+
+func sanitizeUrlForLogging(_ urlString: String) -> String {
+  guard let url = URL(string: urlString) else { return "[malformed-url]" }
+  return sanitizeUrlForLogging(url)
+}
+
 // Share links (vm.tiktok.com, vt.tiktok.com) redirect to www.tiktok.com keeping the agent they
 // were loaded with, so they need the desktop one too.
 func isTikTokUrl(_ url: URL) -> Bool {
@@ -259,8 +341,6 @@ class NoraView: ExpoView, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHan
     if !scriptOnStart.isEmpty {
       controller.addUserScript(WKUserScript(source: scriptOnStart, injectionTime: .atDocumentEnd, forMainFrameOnly: false))
     }
-
-    installGoogleOAuthShim(controller)
   }
 
   private func setupWebView(profile: String) {
@@ -359,7 +439,53 @@ class NoraView: ExpoView, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHan
 
   private func isGoogleOAuthPopupUrl(_ url: URL) -> Bool {
     guard let host = url.host?.lowercased() else { return false }
-    return GOOGLE_AUTH_HOSTS.contains(host)
+    if host == "accounts.google.com" || host.hasPrefix("accounts.google.") || host == "accounts.youtube.com" || host.hasPrefix("accounts.youtube.") {
+      return true
+    }
+    let path = url.path.lowercased()
+    let query = url.query?.lowercased() ?? ""
+    if host.contains("linkedin.com") && (path.contains("connect/google") || path.contains("oauth") || query.contains("google")) {
+      return true
+    }
+    if (host.contains("twitter.com") || host.contains("x.com")) && (path.contains("/i/flow") || path.contains("oauth") || query.contains("google")) {
+      return true
+    }
+    if host == "appleid.apple.com" {
+      return true
+    }
+    // Facebook / Meta login and OAuth flows (including "Log in with Facebook" on Instagram or other sites)
+    if host.hasSuffix("facebook.com") || host == "facebook.com" || host.hasSuffix("fb.com") || host == "fb.com" {
+      if path.contains("/dialog/oauth") ||
+         path.contains("/login") ||
+         path.contains("/oauth") ||
+         path.contains("/plugins/login") ||
+         path.contains("/checkpoint") ||
+         path.contains("two_step_verification") ||
+         path.contains("two_factor") ||
+         query.contains("client_id") ||
+         query.contains("redirect_uri") ||
+         query.contains("app_id") {
+        return true
+      }
+    }
+    // Instagram OAuth and account sign-in popup flows
+    if host.hasSuffix("instagram.com") || host == "instagram.com" {
+      if path.contains("/accounts/login") ||
+         path.contains("/accounts/emailsignup") ||
+         path.contains("/oauth") ||
+         path.contains("/login") ||
+         query.contains("client_id") ||
+         query.contains("redirect_uri") {
+        return true
+      }
+    }
+    // General OAuth 2.0 / OpenID Connect authorization popups
+    if (query.contains("client_id=") && (query.contains("redirect_uri=") || query.contains("response_type="))) ||
+       path.contains("/oauth/authorize") ||
+       path.contains("/oauth2/authorize") {
+      return true
+    }
+    return false
   }
 
   private func showPopup(_ popup: WKWebView) {
@@ -585,25 +711,37 @@ class NoraView: ExpoView, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHan
               return
           }
           if isGoogleOAuthPopupUrl(url) {
+              NouController.shared.log("Popup [OAuth]: committed to OAuth for \(sanitizeUrlForLogging(url))")
               popupCommittedToGoogleOAuth = true
               decisionHandler(.allow)
               return
           }
 
+          NouController.shared.log("Popup [Dismiss]: non-OAuth popup navigation emitted as new-tab for \(sanitizeUrlForLogging(url))")
           emitCustomEvent(type: "new-tab", data: ["url": urlString])
           dismissPopup()
           decisionHandler(.cancel)
           return
       }
 
-      if isMainFrame && isDesktopFacebookUrl(url) && (url.host == "m.facebook.com" || webView.customUserAgent != uaMac) {
+      if webView != popupWebView && isMainFrame && isDesktopFacebookUrl(url) && (url.host == "m.facebook.com" || webView.customUserAgent != uaMac) {
+          NouController.shared.log("Redirect: Facebook mobile -> desktop for \(sanitizeUrlForLogging(url))")
           decisionHandler(.cancel)
           load(url: urlString)
           return
       }
 
+      if webView != popupWebView && isMainFrame && shouldRedirectFacebookToMobile(currentUrl: webView.url, targetUrl: url, desktopMode: webView.customUserAgent == uaMac) {
+          NouController.shared.log("Redirect: Facebook desktop -> mobile for \(sanitizeUrlForLogging(url))")
+          let mobileUrl = urlString.replacingOccurrences(of: "https://www.facebook.com", with: "https://m.facebook.com")
+          decisionHandler(.cancel)
+          load(url: mobileUrl)
+          return
+      }
+
       // Redirect to Old Reddit if setting is enabled
       if NouController.shared.settings.redirectToOldReddit && urlString.hasPrefix("https://www.reddit.com/") {
+          NouController.shared.log("Redirect: old.reddit.com for \(sanitizeUrlForLogging(url))")
           let oldRedditUrl = urlString.replacingOccurrences(of: "www.reddit.com", with: "old.reddit.com")
           decisionHandler(.cancel)
           load(url: oldRedditUrl)
@@ -631,7 +769,7 @@ class NoraView: ExpoView, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHan
         isGoogle ||
         !NouController.shared.settings.openExternalLinkInSystemBrowser
 
-      if allowedInView || !isMainFrame {
+      if webView == popupWebView || allowedInView || !isMainFrame {
           decisionHandler(.allow)
       } else {
           if UIApplication.shared.canOpenURL(url) {
@@ -648,6 +786,9 @@ class NoraView: ExpoView, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHan
     decidePolicyFor navigationResponse: WKNavigationResponse,
     decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void
   ) {
+      if let httpResponse = navigationResponse.response as? HTTPURLResponse, httpResponse.statusCode >= 400 {
+          NouController.shared.log("HTTP error: statusCode=\(httpResponse.statusCode), url=\(sanitizeUrlForLogging(navigationResponse.response.url))")
+      }
       // Attachments and types WebKit can't render would otherwise silently do nothing.
       if !navigationResponse.canShowMIMEType {
           decisionHandler(.download)
@@ -687,10 +828,12 @@ class NoraView: ExpoView, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHan
   }
 
   func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+      NouController.shared.log("Navigation failed with error: \(error.localizedDescription), url: \(sanitizeUrlForLogging(webView.url))")
       handleProxyLoadError(webView, error: error)
   }
 
   func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+      NouController.shared.log("Provisional navigation failed with error: \(error.localizedDescription), url: \(sanitizeUrlForLogging(webView.url))")
       handleProxyLoadError(webView, error: error)
   }
 
@@ -855,14 +998,15 @@ class NoraView: ExpoView, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHan
       if let url = navigationAction.request.url {
           let scheme = url.scheme?.lowercased() ?? ""
           if scheme != "about" && !isGoogleOAuthPopupUrl(url) {
+              NouController.shared.log("Popup [NewTab]: non-OAuth popup emitted as new-tab for \(sanitizeUrlForLogging(url))")
               emitCustomEvent(type: "new-tab", data: ["url": url.absoluteString])
               return nil
           }
           startsAsGoogleOAuth = isGoogleOAuthPopupUrl(url)
       }
 
+      NouController.shared.log("Popup [OAuth]: permitted overlay popup, url=\(sanitizeUrlForLogging(navigationAction.request.url))")
       dismissPopup()
-      installGoogleOAuthShim(configuration.userContentController)
       let popup = WKWebView(frame: bounds, configuration: configuration)
       popup.navigationDelegate = self
       popup.uiDelegate = self
@@ -877,6 +1021,7 @@ class NoraView: ExpoView, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHan
 
   func webViewDidClose(_ webView: WKWebView) {
       if webView == popupWebView {
+          NouController.shared.log("Popup [Close]: closing popup overlay")
           dismissPopup()
       }
   }

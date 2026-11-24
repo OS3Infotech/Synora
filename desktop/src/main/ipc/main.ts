@@ -17,6 +17,7 @@ import {
   writeDesktopBlocklistSource,
 } from '../lib/blocklist.js'
 import { abortWatchFetch, downloadWatchMedia, saveWatchMediaToDownloads, setWatchPageScript, watchFetch } from '../lib/watch.js'
+import { cancelDesktopAuth, openExternalAuthUrl, startDesktopAuth, waitForDesktopAuthCode } from '../lib/loopback-auth.js'
 
 const FETCH_TEXT_TIMEOUT_MS = 20_000
 
@@ -155,6 +156,10 @@ const interfaces = {
     mainWindow.show()
     mainWindow.focus()
   },
+  startDesktopAuth,
+  openExternalAuthUrl,
+  waitForDesktopAuthCode,
+  cancelDesktopAuth,
 }
 
 export type MainInterface = typeof interfaces
@@ -162,7 +167,11 @@ type MainInterfaceKey = keyof MainInterface
 
 function setupChannel() {
   ipcMain.handle(MAIN_CHANNEL, (_, name: string, ...args) => {
-    console.log(MAIN_CHANNEL, name, JSON.stringify(args).slice(0, 100))
+    if (!name.includes('Auth')) {
+      console.log(MAIN_CHANNEL, name, JSON.stringify(args).slice(0, 100))
+    } else {
+      console.log(MAIN_CHANNEL, name)
+    }
     const fn = interfaces[name as MainInterfaceKey]
     if (!fn) {
       console.error(`${fn} unimplemented`)
